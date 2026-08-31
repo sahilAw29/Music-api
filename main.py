@@ -1,27 +1,23 @@
 """
 Key Rotation Manager + Analytics
-─────────────────────────────────
-Run:  pip install fastapi uvicorn && uvicorn main:app --host 0.0.0.0 --port 8000
-Panel:  http://YOUR_IP:8000
+Run: pip install fastapi uvicorn && uvicorn main:app --host 0.0.0.0 --port 9090
 """
 
 import sqlite3, time, uuid, os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-# ─────────────────────────────────────────────────
 DB_PATH      = "manager.db"
-ADMIN_SECRET = "zqinx-admin-6767"   # ← change this
-TEMPLATES    = Path(__file__).parent  # html files same folder
-# ─────────────────────────────────────────────────
+ADMIN_SECRET = "zqinx-admin-6767"
+TEMPLATES    = Path(__file__).parent
 
 def get_db():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -42,7 +38,6 @@ def init_db():
             last_reset  TEXT NOT NULL,
             created_at  TEXT NOT NULL
         );
-
         CREATE TABLE IF NOT EXISTS request_log (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             key_id      TEXT,
@@ -70,7 +65,7 @@ def auth(creds: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     if not creds or creds.credentials != ADMIN_SECRET:
         raise HTTPException(401, "Unauthorized")
 
-def now() -> str:  return datetime.now(timezone.utc).isoformat()
+def now() -> str:   return datetime.now(timezone.utc).isoformat()
 def today() -> str: return datetime.now(timezone.utc).date().isoformat()
 
 def maybe_reset(row, conn):
@@ -81,7 +76,7 @@ def maybe_reset(row, conn):
         d["used_today"] = 0
     return d
 
-# ── Schemas ─────────────────────────────────────
+# ── Schemas ──────────────────────────────────────────────────
 class KeyCreate(BaseModel):
     label: str
     key_value: str
@@ -92,14 +87,20 @@ class KeyUpdate(BaseModel):
     daily_limit: Optional[int] = None
     is_active: Optional[bool] = None
 
-# ════════════════════════════════════════════════
-#  /rotate  — called by youtube.py
-#  Final API itself has NO limit — only the
-#  individual Shruti keys have 100/day limit.
-# ════════════════════════════════════════════════
+class BulkKeyItem(BaseModel):
+    label: str
+    key_value: str
+    daily_limit: int = 100
+
+class BulkCreate(BaseModel):
+    keys: List[BulkKeyItem]
+
+# ════════════════════════════════════════════════════════════
+#  ROTATION — unlimited final API, per-key 100/day limit
+# ════════════════════════════════════════════════════════════
 @app.get("/rotate")
 async def rotate(request: Request, endpoint: str = "download"):
-    t0 = time.monotonic()
+    t0  = time.monotonic()
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM api_keys WHERE is_active=1 ORDER BY used_today ASC"
@@ -115,13 +116,12 @@ async def rotate(request: Request, endpoint: str = "download"):
     ip = request.client.host if request.client else "unknown"
 
     if not chosen:
-        # log the exhausted event
         conn.execute(
             "INSERT INTO request_log (key_id,key_label,endpoint,status_code,latency_ms,success,ip,ts) VALUES (?,?,?,?,?,?,?,?)",
             (None, "ALL_EXHAUSTED", endpoint, 429, latency, 0, ip, now())
         )
         conn.commit(); conn.close()
-        raise HTTPException(429, "All Shruti keys exhausted. Reset at UTC midnight.")
+        raise HTTPException(429, "All keys exhausted. Resets at UTC midnight.")
 
     conn.execute(
         "UPDATE api_keys SET used_today=used_today+1, total_used=total_used+1 WHERE id=?",
@@ -141,9 +141,9 @@ async def rotate(request: Request, endpoint: str = "download"):
         "remaining":   chosen["daily_limit"] - chosen["used_today"] - 1,
     }
 
-# ════════════════════════════════════════════════
-#  ADMIN — KEYS CRUD
-# ════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+#  KEYS CRUD
+# ════════════════════════════════════════════════════════════
 @app.get("/admin/keys", dependencies=[Depends(auth)])
 def list_keys():
     conn = get_db()
@@ -166,8 +166,26 @@ def add_key(body: KeyCreate):
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        conn.close(); raise HTTPException(409, "Key value already exists")
-    conn.close(); return {"id": kid, "message": "Key added"}
+        conn.close(); raise HTTPException(409, "Key already exists")
+    conn.close(); return {"id": kid, "message": "Added"}
+
+# ── BULK ADD ─────────────────────────────────────────────────
+@app.post("/admin/keys/bulk", dependencies=[Depends(auth)])
+def bulk_add(body: BulkCreate):
+    conn = get_db()
+    added = []; skipped = []
+    for item in body.keys:
+        kid = str(uuid.uuid4())[:8]
+        try:
+            conn.execute(
+                "INSERT INTO api_keys (id,label,key_value,daily_limit,last_reset,created_at) VALUES (?,?,?,?,?,?)",
+                (kid, item.label, item.key_value, item.daily_limit, now(), now())
+            )
+            added.append(item.label)
+        except sqlite3.IntegrityError:
+            skipped.append(item.label)
+    conn.commit(); conn.close()
+    return {"added": len(added), "skipped": len(skipped), "added_labels": added, "skipped_labels": skipped}
 
 @app.patch("/admin/keys/{kid}", dependencies=[Depends(auth)])
 def update_key(kid: str, body: KeyUpdate):
@@ -189,7 +207,7 @@ def delete_key(kid: str):
 def reset_key(kid: str):
     conn = get_db()
     conn.execute("UPDATE api_keys SET used_today=0, last_reset=? WHERE id=?", (now(), kid))
-    conn.commit(); conn.close(); return {"message": "Reset done"}
+    conn.commit(); conn.close(); return {"message": "Reset"}
 
 @app.post("/admin/reset-all", dependencies=[Depends(auth)])
 def reset_all():
@@ -197,13 +215,13 @@ def reset_all():
     conn.execute("UPDATE api_keys SET used_today=0, last_reset=?", (now(),))
     conn.commit(); conn.close(); return {"message": "All reset"}
 
-# ════════════════════════════════════════════════
-#  ANALYTICS DATA  — /analytics/data
-# ════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+#  ANALYTICS DATA
+# ════════════════════════════════════════════════════════════
 @app.get("/analytics/data", dependencies=[Depends(auth)])
 def analytics_data():
-    conn = get_db()
-    cutoff24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    conn   = get_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
 
     total   = conn.execute("SELECT COUNT(*) FROM request_log").fetchone()[0]
     success = conn.execute("SELECT COUNT(*) FROM request_log WHERE success=1").fetchone()[0]
@@ -213,109 +231,67 @@ def analytics_data():
     avg_lat = round(avg_lat, 1) if avg_lat else 0
     err_rate = round(error / total * 100, 1) if total else 0.0
 
-    # uptime from first log
     first = conn.execute("SELECT ts FROM request_log ORDER BY id ASC LIMIT 1").fetchone()
     uptime_s = 0
     if first:
         try:
             ft = datetime.fromisoformat(first["ts"].replace("Z",""))
-            if ft.tzinfo is None:
-                ft = ft.replace(tzinfo=timezone.utc)
+            if ft.tzinfo is None: ft = ft.replace(tzinfo=timezone.utc)
             uptime_s = int((datetime.now(timezone.utc) - ft).total_seconds())
-        except Exception:
-            uptime_s = 0
+        except: pass
 
-    # hourly buckets last 24h
     hourly_raw = conn.execute("""
         SELECT strftime('%H', ts) as hr,
                COUNT(*) as hits,
                SUM(success) as s,
                SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) as e
-        FROM request_log WHERE ts > ?
-        GROUP BY hr ORDER BY hr
-    """, (cutoff24,)).fetchall()
-    hourly = [{"label": r["hr"]+":00", "hits": r["hits"],
-               "success": r["s"] or 0, "error": r["e"] or 0}
-              for r in hourly_raw]
+        FROM request_log WHERE ts > ? GROUP BY hr ORDER BY hr
+    """, (cutoff,)).fetchall()
+    hourly = [{"label": r["hr"]+":00","hits":r["hits"],"success":r["s"] or 0,"error":r["e"] or 0} for r in hourly_raw]
 
-    # top endpoints
     ep_raw = conn.execute("""
-        SELECT endpoint,
-               COUNT(*) as hits,
-               SUM(success) as s,
+        SELECT endpoint, COUNT(*) as hits, SUM(success) as s,
                SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) as e,
-               AVG(latency_ms) as avg_lat,
-               MIN(latency_ms) as min_lat,
-               MAX(latency_ms) as max_lat
-        FROM request_log
-        GROUP BY endpoint ORDER BY hits DESC LIMIT 20
+               AVG(latency_ms) as avg_lat, MIN(latency_ms) as min_lat, MAX(latency_ms) as max_lat
+        FROM request_log GROUP BY endpoint ORDER BY hits DESC LIMIT 20
     """).fetchall()
-    endpoints = [{
-        "name": r["endpoint"], "hits": r["hits"],
-        "success": r["s"] or 0, "error": r["e"] or 0,
-        "avgLatencyMs": round(r["avg_lat"] or 0, 1),
-        "minLatency":   r["min_lat"] or 0,
-        "maxLatency":   r["max_lat"] or 0,
-        "errorRate":    round((r["e"] or 0) / r["hits"] * 100, 1) if r["hits"] else 0
-    } for r in ep_raw]
+    endpoints = [{"name":r["endpoint"],"hits":r["hits"],"success":r["s"] or 0,"error":r["e"] or 0,
+                  "avgLatencyMs":round(r["avg_lat"] or 0,1),"minLatency":r["min_lat"] or 0,
+                  "maxLatency":r["max_lat"] or 0,
+                  "errorRate":round((r["e"] or 0)/r["hits"]*100,1) if r["hits"] else 0} for r in ep_raw]
 
-    # status codes
-    sc_raw = conn.execute("""
-        SELECT status_code as code, COUNT(*) as cnt
-        FROM request_log GROUP BY code ORDER BY cnt DESC
-    """).fetchall()
-    status_dist = [{"code": str(r["code"]), "count": r["cnt"]} for r in sc_raw]
-
-    # recent 40
-    recent_raw = conn.execute(
-        "SELECT * FROM request_log ORDER BY id DESC LIMIT 40"
-    ).fetchall()
-    recent = [{
-        "time": r["ts"], "endpoint": r["endpoint"],
-        "statusCode": r["status_code"], "latencyMs": r["latency_ms"],
-        "success": bool(r["success"]), "ip": r["ip"] or "—",
-        "keyLabel": r["key_label"] or "—"
-    } for r in recent_raw]
-
-    # per-key breakdown
+    sc_raw  = conn.execute("SELECT status_code as code, COUNT(*) as cnt FROM request_log GROUP BY code ORDER BY cnt DESC").fetchall()
+    recent  = conn.execute("SELECT * FROM request_log ORDER BY id DESC LIMIT 40").fetchall()
     key_rows = conn.execute("SELECT * FROM api_keys ORDER BY total_used DESC").fetchall()
     keys_data = []
     for row in key_rows:
         d = maybe_reset(row, conn)
         d["remaining"] = max(0, d["daily_limit"] - d["used_today"])
-        d["pct_used"]  = round(d["used_today"] / d["daily_limit"] * 100, 1) if d["daily_limit"] else 0
+        d["pct_used"]  = round(d["used_today"]/d["daily_limit"]*100,1) if d["daily_limit"] else 0
         keys_data.append(d)
 
     conn.close()
     return {
-        "totalRequests": total,
-        "totalSuccess":  success,
-        "totalError":    error,
-        "errorRate":     err_rate,
-        "uniqueIps":     uniq_ip,
-        "avgLatency":    avg_lat,
-        "uptime":        uptime_s,
-        "totalEndpoints": len(endpoints),
-        "hourlyChart":   hourly,
-        "topEndpoints":  endpoints,
-        "statusDist":    status_dist,
-        "recentRequests": recent,
-        "keys":          keys_data,
+        "totalRequests":total,"totalSuccess":success,"totalError":error,
+        "errorRate":err_rate,"uniqueIps":uniq_ip,"avgLatency":avg_lat,"uptime":uptime_s,
+        "totalEndpoints":len(endpoints),"hourlyChart":hourly,"topEndpoints":endpoints,
+        "statusDist":[{"code":str(r["code"]),"count":r["cnt"]} for r in sc_raw],
+        "recentRequests":[{"time":r["ts"],"endpoint":r["endpoint"],"statusCode":r["status_code"],
+                           "latencyMs":r["latency_ms"],"success":bool(r["success"]),
+                           "ip":r["ip"] or "—","keyLabel":r["key_label"] or "—"} for r in recent],
+        "keys":keys_data,
     }
 
-# ════════════════════════════════════════════════
-#  SERVE HTML PAGES
-# ════════════════════════════════════════════════
+@app.get("/health")
+def health(): return {"status": "ok", "ts": now()}
+
+# ════════════════════════════════════════════════════════════
+#  HTML PAGES
+# ════════════════════════════════════════════════════════════
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return HTMLResponse(open(TEMPLATES / "analytics.html").read()
-        .replace("<%= owner %>", "Admin")
-        .replace("<%= channel %>", "Key Rotator")
-        .replace("<%= totalEndpoints %>", "—"))
+def analytics_page():
+    return HTMLResponse(open(TEMPLATES / "analytics.html").read())
 
 @app.get("/keys", response_class=HTMLResponse)
 def keys_page():
     return HTMLResponse(open(TEMPLATES / "keys.html").read())
-
-@app.get("/health")
-def health(): return {"status": "ok", "ts": now()}
