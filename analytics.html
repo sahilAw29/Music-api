@@ -2,260 +2,250 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics — Key Rotation Manager</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analytics — Key Manager</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-:root {
-  --bg:#030712;--surface:#0d1117;--surface2:#161b22;--surface3:#1c2128;
-  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
-  --text:#e6edf3;--muted:#7d8590;--muted2:#58636d;
-  --green:#3fb950;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;
-  --amber:#e3b341;--cyan:#39d353;--accent:#7c3aed;--accent2:#a855f7;
-  --glow:rgba(124,58,237,.15);
-}
+:root{--bg:#030712;--surface:#0d1117;--surface2:#161b22;--surface3:#1c2128;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);--text:#e6edf3;--muted:#7d8590;--muted2:#58636d;--green:#3fb950;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--amber:#e3b341;--accent:#7c3aed;--accent2:#a855f7;--glow:rgba(124,58,237,.15)}
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
 .layout{display:flex;min-height:100vh}
 
 /* SIDEBAR */
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50}
-.sidebar-logo{padding:1.25rem 1.2rem 1rem;border-bottom:1px solid var(--border)}
-.sidebar-logo .mark{font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700;color:var(--accent2);letter-spacing:.1em;text-transform:uppercase}
-.sidebar-logo .owner{font-size:.75rem;color:var(--muted);margin-top:.2rem}
-.sidebar-nav{padding:.75rem .6rem;flex:1}
-.nav-item{display:flex;align-items:center;gap:.65rem;padding:.5rem .7rem;border-radius:8px;font-size:.82rem;color:var(--muted);text-decoration:none;transition:background .15s,color .15s;cursor:pointer;margin-bottom:.15rem;border:none;background:none;width:100%;text-align:left}
-.nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:var(--glow);color:var(--accent2)}
-.nav-item .icon{width:16px;height:16px;opacity:.7;flex-shrink:0}
-.nav-item.active .icon{opacity:1}
-.sidebar-footer{padding:.75rem 1rem;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted2)}
+.brand{padding:1.1rem 1.2rem;border-bottom:1px solid var(--border)}
+.brand-name{font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:700;color:var(--accent2);letter-spacing:.08em}
+.brand-sub{font-size:.7rem;color:var(--muted);margin-top:.2rem}
+.nav{padding:.6rem .5rem;flex:1;display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:8px;font-size:.82rem;color:var(--muted);text-decoration:none;border-left:3px solid transparent;transition:all .15s}
+.nav a:hover{background:var(--surface2);color:var(--text)}
+.nav a.active{background:var(--glow);color:var(--accent2);border-left-color:var(--accent)}
+.nav a svg{width:15px;height:15px;flex-shrink:0;opacity:.7}
+.nav a.active svg{opacity:1}
+.sidebar-foot{padding:.75rem 1rem;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted2)}
 
 /* MAIN */
-.main{margin-left:220px;flex:1;padding:1.5rem 1.75rem 3rem;max-width:100%}
-
-/* TOPBAR */
+.main{margin-left:220px;flex:1;padding:1.5rem 1.75rem 3rem}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem;gap:1rem;flex-wrap:wrap}
-.topbar h1{font-size:1.35rem;font-weight:600;letter-spacing:-.02em}
-.topbar-right{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
-.status-dot{display:inline-flex;align-items:center;gap:.45rem;font-size:.75rem;color:var(--green);background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.25);border-radius:999px;padding:.28rem .7rem}
-.status-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s ease-in-out infinite}
+.topbar h1{font-size:1.3rem;font-weight:600;letter-spacing:-.02em}
+.topbar-sub{font-size:.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.25rem}
+.topbar-r{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.live-dot{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;color:var(--green);background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.25);border-radius:999px;padding:.25rem .65rem}
+.live-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
-.refresh-info{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted2)}
+.refresh-txt{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted2)}
+.btn-csv{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .6rem;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--green);background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.28);transition:background .15s;white-space:nowrap}
+.btn-csv:hover{background:rgba(63,185,80,.16)}
 .btn-link{font-size:.78rem;color:var(--blue);text-decoration:none;padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(88,166,255,.25);background:rgba(88,166,255,.07);transition:background .15s}
 .btn-link:hover{background:rgba(88,166,255,.15)}
-.btn-csv{display:inline-flex;align-items:center;gap:.4rem;padding:.28rem .65rem;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--green);background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.28);transition:background .2s;white-space:nowrap}
-.btn-csv:hover{background:rgba(63,185,80,.16)}
 
 /* STAT CARDS */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem;margin-bottom:1.5rem}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.2rem;position:relative;overflow:hidden;transition:border-color .2s}
 .stat-card:hover{border-color:var(--border2)}
 .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0}
-.stat-card.green::before{background:linear-gradient(90deg,var(--green),transparent)}
-.stat-card.red::before{background:linear-gradient(90deg,var(--red),transparent)}
-.stat-card.blue::before{background:linear-gradient(90deg,var(--blue),transparent)}
-.stat-card.purple::before{background:linear-gradient(90deg,var(--purple),transparent)}
-.stat-card.amber::before{background:linear-gradient(90deg,var(--amber),transparent)}
-.stat-card.cyan::before{background:linear-gradient(90deg,var(--cyan),transparent)}
-.stat-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.55rem;font-weight:500}
-.stat-value{font-family:'JetBrains Mono',monospace;font-size:1.75rem;font-weight:700;line-height:1;letter-spacing:-.03em}
-.stat-value.green{color:var(--green)}.stat-value.red{color:var(--red)}.stat-value.blue{color:var(--blue)}
-.stat-value.purple{color:var(--purple)}.stat-value.amber{color:var(--amber)}.stat-value.white{color:var(--text)}
-.stat-sub{font-size:.7rem;color:var(--muted2);margin-top:.35rem}
+.stat-card.c-blue::before{background:linear-gradient(90deg,var(--blue),transparent)}
+.stat-card.c-green::before{background:linear-gradient(90deg,var(--green),transparent)}
+.stat-card.c-red::before{background:linear-gradient(90deg,var(--red),transparent)}
+.stat-card.c-purple::before{background:linear-gradient(90deg,var(--purple),transparent)}
+.stat-card.c-amber::before{background:linear-gradient(90deg,var(--amber),transparent)}
+.stat-card.c-cyan::before{background:linear-gradient(90deg,#39d353,transparent)}
+.s-label{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;font-weight:500}
+.s-val{font-family:'JetBrains Mono',monospace;font-size:1.75rem;font-weight:700;line-height:1}
+.s-val.blue{color:var(--blue)}.s-val.green{color:var(--green)}.s-val.red{color:var(--red)}
+.s-val.purple{color:var(--purple)}.s-val.amber{color:var(--amber)}.s-val.white{color:var(--text)}
+.s-sub{font-size:.68rem;color:var(--muted2);margin-top:.35rem}
+.loading{opacity:.4;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
 
 /* PANELS */
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
-.grid-3-1{display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1rem}
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.panel-head{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.2rem;border-bottom:1px solid var(--border)}
-.panel-title{font-size:.82rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:.5rem}
-.panel-badge{font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1rem}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.2rem;border-bottom:1px solid var(--border)}
+.panel-title{font-size:.82rem;font-weight:600;display:flex;align-items:center;gap:.5rem}
+.panel-badge{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem}
 .panel-body{padding:1.1rem 1.2rem}
-
-/* CHART */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.g3-1{display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1rem}
 .chart-wrap{position:relative;width:100%}
 
 /* TABLE */
 .tbl{width:100%;border-collapse:collapse;font-size:.78rem}
-.tbl th{text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);white-space:nowrap}
-.tbl td{padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+.tbl th{text-align:left;padding:.5rem .75rem;font-size:.62rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);white-space:nowrap}
+.tbl td{padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle}
 .tbl tr:last-child td{border-bottom:none}
-.tbl tr:hover td{background:rgba(255,255,255,.025)}
-.ep-name{font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:.75rem}
+.tbl tr:hover td{background:rgba(255,255,255,.02)}
+.ep-name{font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:.73rem}
 .num{font-family:'JetBrains Mono',monospace;font-weight:600}
-.num-green{color:var(--green)}.num-red{color:var(--red)}.num-blue{color:var(--blue)}.num-amber{color:var(--amber)}.num-muted{color:var(--muted)}
-.bar-cell{min-width:80px}
+.ng{color:var(--green)}.nr{color:var(--red)}.nb{color:var(--blue)}.na{color:var(--amber)}.nm{color:var(--muted)}
 .mini-bar{height:4px;border-radius:2px;background:var(--surface3);margin-top:3px;overflow:hidden}
-.mini-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .6s}
+.mini-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s}
 
 /* STATUS */
 .status-grid{display:flex;flex-direction:column;gap:.5rem}
-.status-row{display:flex;align-items:center;gap:.7rem}
-.status-code{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;width:40px;flex-shrink:0}
+.status-row{display:flex;align-items:center;gap:.6rem}
+.sc-code{font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;width:38px;flex-shrink:0}
 .sc-2xx{color:var(--green)}.sc-4xx{color:var(--amber)}.sc-5xx{color:var(--red)}.sc-other{color:var(--muted)}
-.status-bar{flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
-.status-bar-fill{height:100%;border-radius:3px;transition:width .6s}
+.sc-bar{flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
+.sc-fill{height:100%;border-radius:3px;transition:width .5s}
 .sc-2xx-fill{background:var(--green)}.sc-4xx-fill{background:var(--amber)}.sc-5xx-fill{background:var(--red)}.sc-other-fill{background:var(--muted2)}
-.status-count{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);min-width:36px;text-align:right}
+.sc-cnt{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted);min-width:34px;text-align:right}
 
-/* RECENT LOG */
-.log-row{display:flex;align-items:center;gap:.7rem;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.75rem}
+/* QUOTA BARS */
+.quota-row{display:grid;grid-template-columns:140px 1fr 100px 70px;align-items:center;gap:12px;padding:.4rem 0}
+.quota-label{font-family:'JetBrains Mono',monospace;font-size:.73rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quota-track{background:var(--surface3);border-radius:4px;height:8px;overflow:hidden}
+.quota-fill{height:100%;border-radius:4px;transition:width .3s}
+.quota-meta{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted)}
+
+/* LOG */
+.log-row{display:flex;align-items:center;gap:.6rem;padding:.42rem 0;border-bottom:1px solid rgba(255,255,255,.03);font-size:.73rem}
 .log-row:last-child{border-bottom:none}
-.log-time{font-family:'JetBrains Mono',monospace;color:var(--muted2);font-size:.66rem;white-space:nowrap}
-.log-ep{font-family:'JetBrains Mono',monospace;color:var(--blue);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.log-key{font-family:'JetBrains Mono',monospace;color:var(--purple);font-size:.68rem;white-space:nowrap}
-.log-status{font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;padding:.1rem .4rem;border-radius:4px;white-space:nowrap}
+.log-time{font-family:'JetBrains Mono',monospace;color:var(--muted2);font-size:.64rem;white-space:nowrap}
+.log-ep{font-family:'JetBrains Mono',monospace;color:var(--blue);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log-key{font-family:'JetBrains Mono',monospace;color:var(--purple);font-size:.66rem;white-space:nowrap}
+.log-s{font-family:'JetBrains Mono',monospace;font-size:.68rem;font-weight:700;padding:.1rem .35rem;border-radius:4px;white-space:nowrap}
 .log-ok{color:var(--green);background:rgba(63,185,80,.1)}.log-err{color:var(--red);background:rgba(248,81,73,.1)}
-.log-lat{font-family:'JetBrains Mono',monospace;color:var(--muted2);font-size:.68rem;white-space:nowrap}
-.empty{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:.82rem}
-.empty span{display:block;font-size:1.8rem;margin-bottom:.5rem}
-.loading{opacity:.4;animation:pulse-load 1.5s ease-in-out infinite}
-@keyframes pulse-load{0%,100%{opacity:.4}50%{opacity:.9}}
-@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:1rem}.grid-2,.grid-3-1{grid-template-columns:1fr}}
+.log-lat{font-family:'JetBrains Mono',monospace;color:var(--muted2);font-size:.65rem;white-space:nowrap}
+.empty{text-align:center;padding:2rem 1rem;color:var(--muted);font-size:.8rem}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:.3rem;border-radius:20px;padding:.18rem .6rem;font-size:.68rem;font-weight:600}
+.badge-ok{background:rgba(63,185,80,.12);color:var(--green)}
+.badge-off{background:rgba(125,133,144,.1);color:var(--muted)}
+
+@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:1rem}.g2,.g3-1{grid-template-columns:1fr}}
 @media(max-width:600px){.stats-grid{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
 <div class="layout">
 
+<!-- SIDEBAR -->
 <nav class="sidebar">
-  <div class="sidebar-logo">
-    <div class="mark">⚡ Key Rotator</div>
-    <div class="owner">Shruti API Manager</div>
+  <div class="brand">
+    <div class="brand-name">⚡ KEY ROTATOR</div>
+    <div class="brand-sub">Shruti API Manager</div>
   </div>
-  <div class="sidebar-nav">
-    <a class="nav-item active" href="/">
-      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="10" width="3" height="5" rx=".5"/><rect x="6" y="6" width="3" height="9" rx=".5"/><rect x="11" y="2" width="3" height="13" rx=".5"/></svg>
+  <div class="nav">
+    <a href="/" class="active">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="10" width="3" height="5" rx=".5"/><rect x="6" y="6" width="3" height="9" rx=".5"/><rect x="11" y="2" width="3" height="13" rx=".5"/></svg>
       Analytics
     </a>
-    <a class="nav-item" href="/keys">
-      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM6.5 9.5l-5 5"/><path d="M3.5 11.5l2 2"/></svg>
+    <a href="/keys">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM6.5 9.5l-5 5"/><path d="M3.5 11.5l2 2"/></svg>
       API Keys
     </a>
-    <a class="nav-item" href="/analytics/data" target="_blank">
-      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v12H2zM5 5h6M5 8h6M5 11h3"/></svg>
+    <a href="/analytics/data" target="_blank">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v12H2zM5 5h6M5 8h6M5 11h3"/></svg>
       Raw JSON
     </a>
-    <a class="nav-item" href="/health" target="_blank">
-      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8h3l2-5 3 10 2-5h4"/></svg>
+    <a href="/health" target="_blank">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8h3l2-5 3 10 2-5h4"/></svg>
       Health
     </a>
   </div>
-  <div class="sidebar-footer">Auto-refresh: 15s</div>
+  <div class="sidebar-foot">Auto-refresh · 15s</div>
 </nav>
 
+<!-- MAIN -->
 <main class="main">
   <div class="topbar">
     <div>
-      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.1em">Gateway Dashboard</div>
+      <div class="topbar-sub">Gateway Dashboard</div>
       <h1>Analytics <span style="color:var(--accent2)">Overview</span></h1>
     </div>
-    <div class="topbar-right">
-      <span class="status-dot">Live</span>
-      <span class="refresh-info" id="refresh-timer">Refreshing in 15s</span>
+    <div class="topbar-r">
+      <span class="live-dot">Live</span>
+      <span class="refresh-txt" id="rtimer">Refreshing in 15s</span>
       <button class="btn-csv" id="export-csv">↓ Export CSV</button>
-      <a href="/keys" class="btn-link">API Keys →</a>
+      <a href="/keys" class="btn-link">Manage Keys →</a>
     </div>
   </div>
 
-  <!-- STAT CARDS -->
+  <!-- STATS -->
   <div class="stats-grid">
-    <div class="stat-card blue loading"><div class="stat-label">Total Requests</div><div class="stat-value blue" id="s-total">—</div><div class="stat-sub" id="s-uptime">uptime —</div></div>
-    <div class="stat-card green loading"><div class="stat-label">Successful</div><div class="stat-value green" id="s-success">—</div><div class="stat-sub" id="s-spct">— success rate</div></div>
-    <div class="stat-card red loading"><div class="stat-label">Errors</div><div class="stat-value red" id="s-error">—</div><div class="stat-sub" id="s-erate">—% error rate</div></div>
-    <div class="stat-card purple loading"><div class="stat-label">Unique IPs</div><div class="stat-value purple" id="s-ips">—</div><div class="stat-sub">distinct callers</div></div>
-    <div class="stat-card amber loading"><div class="stat-label">Avg Latency</div><div class="stat-value amber" id="s-lat">—</div><div class="stat-sub">milliseconds</div></div>
-    <div class="stat-card cyan loading"><div class="stat-label">Active Keys</div><div class="stat-value white" id="s-keys">—</div><div class="stat-sub" id="s-keysub">— total registered</div></div>
+    <div class="stat-card c-blue loading"><div class="s-label">Total Requests</div><div class="s-val blue" id="s-total">—</div><div class="s-sub" id="s-uptime">—</div></div>
+    <div class="stat-card c-green loading"><div class="s-label">Successful</div><div class="s-val green" id="s-ok">—</div><div class="s-sub" id="s-okpct">—</div></div>
+    <div class="stat-card c-red loading"><div class="s-label">Errors</div><div class="s-val red" id="s-err">—</div><div class="s-sub" id="s-errpct">—</div></div>
+    <div class="stat-card c-purple loading"><div class="s-label">Unique IPs</div><div class="s-val purple" id="s-ips">—</div><div class="s-sub">distinct callers</div></div>
+    <div class="stat-card c-amber loading"><div class="s-label">Avg Latency</div><div class="s-val amber" id="s-lat">—</div><div class="s-sub">milliseconds</div></div>
+    <div class="stat-card c-cyan loading"><div class="s-label">Active Keys</div><div class="s-val white" id="s-keys">—</div><div class="s-sub" id="s-keysub">—</div></div>
   </div>
 
-  <!-- HOURLY CHART -->
-  <div class="panel" style="margin-bottom:1rem">
+  <!-- HOURLY -->
+  <div class="panel">
     <div class="panel-head">
       <div class="panel-title">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12l4-5 3 3 4-6 3 4"/></svg>
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12l4-5 3 3 4-6 3 4"/></svg>
         Requests — Last 24 Hours
       </div>
       <span class="panel-badge" id="hourly-badge">loading…</span>
     </div>
-    <div class="panel-body">
-      <div class="chart-wrap" style="height:200px"><canvas id="chart-hourly"></canvas></div>
-    </div>
+    <div class="panel-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-hourly"></canvas></div></div>
   </div>
 
-  <!-- KEY QUOTA ROW -->
-  <div class="panel" style="margin-bottom:1rem">
+  <!-- KEY QUOTA -->
+  <div class="panel">
     <div class="panel-head">
       <div class="panel-title">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM6.5 9.5l-5 5"/></svg>
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM6.5 9.5l-5 5"/></svg>
         Key Quota — Today
       </div>
       <a href="/keys" class="btn-link" style="font-size:.72rem">Manage →</a>
     </div>
-    <div class="panel-body" id="quota-grid" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="panel-body" id="quota-grid"></div>
   </div>
 
   <!-- ENDPOINTS + STATUS -->
-  <div class="grid-3-1">
-    <div class="panel">
+  <div class="g3-1">
+    <div class="panel" style="margin-bottom:0">
       <div class="panel-head">
         <div class="panel-title">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="10" width="3" height="5" rx=".5"/><rect x="6" y="6" width="3" height="9" rx=".5"/><rect x="11" y="2" width="3" height="13" rx=".5"/></svg>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="10" width="3" height="5" rx=".5"/><rect x="6" y="6" width="3" height="9" rx=".5"/><rect x="11" y="2" width="3" height="13" rx=".5"/></svg>
           Top Endpoints
         </div>
         <button class="btn-csv" id="csv-ep">↓ CSV</button>
       </div>
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Endpoint</th><th>Hits</th><th>OK</th><th>Err</th><th>Avg ms</th><th>Err%</th><th>Share</th></tr></thead>
-          <tbody id="ep-tbody"><tr><td colspan="7" class="empty"><span>◎</span>No requests yet</td></tr></tbody>
+          <thead><tr><th>Endpoint</th><th>Hits</th><th>OK</th><th>Err</th><th>Avg ms</th><th>Err%</th><th style="min-width:70px">Share</th></tr></thead>
+          <tbody id="ep-tbody"><tr><td colspan="7" class="empty">No requests yet</td></tr></tbody>
         </table>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" style="margin-bottom:0">
       <div class="panel-head"><div class="panel-title">Status Codes</div></div>
-      <div class="panel-body"><div class="status-grid" id="status-grid"><div class="empty"><span>◎</span>No data</div></div></div>
+      <div class="panel-body"><div class="status-grid" id="status-grid"><div class="empty">No data</div></div></div>
     </div>
   </div>
 
-  <!-- PIE + RECENT -->
-  <div class="grid-2">
-    <div class="panel">
+  <div style="margin-bottom:1rem"></div>
+
+  <!-- PIE + LOG -->
+  <div class="g2">
+    <div class="panel" style="margin-bottom:0">
       <div class="panel-head"><div class="panel-title">Success vs Error</div></div>
       <div class="panel-body">
-        <div class="chart-wrap" style="height:180px;display:flex;align-items:center;justify-content:center">
+        <div style="height:180px;display:flex;align-items:center;justify-content:center">
           <canvas id="chart-pie" style="max-width:180px;max-height:180px"></canvas>
         </div>
         <div style="display:flex;justify-content:center;gap:1.5rem;margin-top:.75rem">
-          <div style="display:flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--muted)">
-            <span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block"></span>
-            Success (<span id="pie-sp">—</span>%)
-          </div>
-          <div style="display:flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--muted)">
-            <span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span>
-            Error (<span id="pie-ep">—</span>%)
-          </div>
+          <div style="display:flex;align-items:center;gap:.4rem;font-size:.73rem;color:var(--muted)"><span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>Success (<span id="pie-sp">—</span>%)</div>
+          <div style="display:flex;align-items:center;gap:.4rem;font-size:.73rem;color:var(--muted)"><span style="width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block"></span>Error (<span id="pie-ep">—</span>%)</div>
         </div>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" style="margin-bottom:0">
       <div class="panel-head">
         <div class="panel-title">Recent Requests</div>
-        <div style="display:flex;align-items:center;gap:.5rem">
+        <div style="display:flex;gap:.4rem;align-items:center">
           <button class="btn-csv" id="csv-recent">↓ CSV</button>
-          <span class="panel-badge" id="recent-count">0</span>
+          <span class="panel-badge" id="recent-cnt">0</span>
         </div>
       </div>
-      <div class="panel-body" style="padding:0 1.2rem" id="recent-log">
-        <div class="empty"><span>◎</span>No recent requests</div>
-      </div>
+      <div class="panel-body" style="padding:0 1.2rem" id="recent-log"><div class="empty">No requests yet</div></div>
     </div>
   </div>
 </main>
@@ -263,228 +253,156 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 
 <script>
 (function(){
-  'use strict';
-  const TOKEN = 'zqinx-admin-6767';
-  let hourlyChart=null, pieChart=null, countdown=15, timer=null, snap=null;
+  const TOKEN='zqinx-admin-6767';
+  let hChart=null,pChart=null,cd=15,tmr=null,snap=null;
 
   Chart.defaults.color='#7d8590';
   Chart.defaults.font.family="'JetBrains Mono',monospace";
   Chart.defaults.font.size=10;
 
-  const C={green:'#3fb950',red:'#f85149',blue:'#58a6ff',purple:'#bc8cff',amber:'#e3b341',accent:'#7c3aed',accent2:'#a855f7',muted:'#30363d'};
-
-  function initHourly(){
+  function initH(){
     const ctx=document.getElementById('chart-hourly').getContext('2d');
-    hourlyChart=new Chart(ctx,{type:'bar',data:{labels:[],datasets:[
-      {label:'Success',data:[],backgroundColor:'rgba(63,185,80,.6)',borderColor:C.green,borderWidth:1,borderRadius:3,borderSkipped:false},
-      {label:'Error',  data:[],backgroundColor:'rgba(248,81,73,.5)',borderColor:C.red,  borderWidth:1,borderRadius:3,borderSkipped:false}
+    hChart=new Chart(ctx,{type:'bar',data:{labels:[],datasets:[
+      {label:'Success',data:[],backgroundColor:'rgba(63,185,80,.6)',borderColor:'#3fb950',borderWidth:1,borderRadius:3,borderSkipped:false},
+      {label:'Error',  data:[],backgroundColor:'rgba(248,81,73,.5)',borderColor:'#f85149',borderWidth:1,borderRadius:3,borderSkipped:false}
     ]},options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:true,position:'top',align:'end',labels:{boxWidth:8,boxHeight:8,padding:12,usePointStyle:true}},
+      plugins:{legend:{display:true,position:'top',align:'end',labels:{boxWidth:8,boxHeight:8,padding:10,usePointStyle:true}},
         tooltip:{mode:'index',intersect:false,backgroundColor:'#0d1117',borderColor:'rgba(255,255,255,.12)',borderWidth:1}},
-      scales:{x:{stacked:true,grid:{color:C.muted,drawTicks:false},border:{display:false},ticks:{maxRotation:0,maxTicksLimit:12}},
-              y:{stacked:true,beginAtZero:true,grid:{color:C.muted,drawTicks:false},border:{display:false},ticks:{precision:0}}}}});
+      scales:{x:{stacked:true,grid:{color:'#30363d',drawTicks:false},border:{display:false},ticks:{maxRotation:0,maxTicksLimit:12}},
+              y:{stacked:true,beginAtZero:true,grid:{color:'#30363d',drawTicks:false},border:{display:false},ticks:{precision:0}}}}});
   }
-
-  function initPie(){
+  function initP(){
     const ctx=document.getElementById('chart-pie').getContext('2d');
-    pieChart=new Chart(ctx,{type:'doughnut',data:{labels:['Success','Error'],
-      datasets:[{data:[0,0],backgroundColor:[C.green,C.red],borderColor:'#0d1117',borderWidth:3,hoverOffset:4}]},
-      options:{responsive:true,maintainAspectRatio:true,cutout:'68%',
-        plugins:{legend:{display:false},tooltip:{backgroundColor:'#0d1117',borderColor:'rgba(255,255,255,.12)',borderWidth:1}}}});
+    pChart=new Chart(ctx,{type:'doughnut',data:{labels:['Success','Error'],datasets:[{data:[0,0],backgroundColor:['#3fb950','#f85149'],borderColor:'#0d1117',borderWidth:3,hoverOffset:4}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'68%',plugins:{legend:{display:false},tooltip:{backgroundColor:'#0d1117',borderColor:'rgba(255,255,255,.12)',borderWidth:1}}}});
   }
 
-  function fmt(n){
-    if(n==null)return'—';
-    if(n>=1e6)return(n/1e6).toFixed(1)+'M';
-    if(n>=1000)return(n/1000).toFixed(1)+'K';
-    return String(n);
-  }
-  function fmtUptime(s){
-    if(!s)return'—';
-    const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
-    if(h>0)return h+'h '+m+'m uptime';
-    if(m>0)return m+'m '+sec+'s uptime';
-    return sec+'s uptime';
-  }
-  function fmtTime(iso){
-    try{return new Date(iso).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});}
-    catch{return iso;}
-  }
-  function scClass(code){
-    const c=parseInt(code);
-    if(c>=200&&c<300)return'2xx';
-    if(c>=400&&c<500)return'4xx';
-    if(c>=500)return'5xx';
-    return'other';
-  }
-  function pctColor(p){return p>=90?'var(--red)':p>=60?'var(--amber)':'var(--green)';}
+  const fmt=n=>{if(n==null)return'—';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'K';return String(n)};
+  const fmtUp=s=>{if(!s)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h>0?h+'h '+m+'m uptime':m>0?m+'m '+sec+'s uptime':sec+'s uptime'};
+  const fmtT=iso=>{try{return new Date(iso).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})}catch{return iso}};
+  const scClass=c=>{const n=parseInt(c);return n>=200&&n<300?'2xx':n>=400&&n<500?'4xx':n>=500?'5xx':'other'};
+  const pctCol=p=>p>=90?'var(--red)':p>=60?'var(--amber)':'var(--green)';
 
   function update(d){
     document.querySelectorAll('.loading').forEach(el=>el.classList.remove('loading'));
     document.getElementById('s-total').textContent=fmt(d.totalRequests);
-    document.getElementById('s-uptime').textContent=fmtUptime(d.uptime);
-    document.getElementById('s-success').textContent=fmt(d.totalSuccess);
+    document.getElementById('s-uptime').textContent=fmtUp(d.uptime);
+    document.getElementById('s-ok').textContent=fmt(d.totalSuccess);
     const sp=d.totalRequests>0?((d.totalSuccess/d.totalRequests)*100).toFixed(1):'0.0';
-    document.getElementById('s-spct').textContent=sp+'% success rate';
-    document.getElementById('s-error').textContent=fmt(d.totalError);
-    document.getElementById('s-erate').textContent=d.errorRate+'% error rate';
+    document.getElementById('s-okpct').textContent=sp+'% success rate';
+    document.getElementById('s-err').textContent=fmt(d.totalError);
+    document.getElementById('s-errpct').textContent=d.errorRate+'% error rate';
     document.getElementById('s-ips').textContent=fmt(d.uniqueIps);
     document.getElementById('s-lat').textContent=d.avgLatency+'ms';
-
-    // key stats
-    const activeK=(d.keys||[]).filter(k=>k.is_active).length;
-    document.getElementById('s-keys').textContent=activeK;
+    const ak=(d.keys||[]).filter(k=>k.is_active).length;
+    document.getElementById('s-keys').textContent=ak;
     document.getElementById('s-keysub').textContent=(d.keys||[]).length+' total registered';
 
-    // hourly chart
-    if(d.hourlyChart&&hourlyChart){
-      hourlyChart.data.labels=d.hourlyChart.map(b=>b.label);
-      hourlyChart.data.datasets[0].data=d.hourlyChart.map(b=>b.success);
-      hourlyChart.data.datasets[1].data=d.hourlyChart.map(b=>b.error);
-      hourlyChart.update('none');
-      const ht=d.hourlyChart.reduce((s,b)=>s+b.hits,0);
-      document.getElementById('hourly-badge').textContent=fmt(ht)+' reqs / 24h';
+    // hourly
+    if(d.hourlyChart&&hChart){
+      hChart.data.labels=d.hourlyChart.map(b=>b.label);
+      hChart.data.datasets[0].data=d.hourlyChart.map(b=>b.success);
+      hChart.data.datasets[1].data=d.hourlyChart.map(b=>b.error);
+      hChart.update('none');
+      document.getElementById('hourly-badge').textContent=fmt(d.hourlyChart.reduce((s,b)=>s+b.hits,0))+' reqs/24h';
     }
 
     // pie
-    if(pieChart){
-      pieChart.data.datasets[0].data=[d.totalSuccess||0,d.totalError||0];
-      pieChart.update('none');
-    }
-    const epct=d.totalRequests>0?((d.totalError/d.totalRequests)*100).toFixed(1):'0.0';
+    if(pChart){pChart.data.datasets[0].data=[d.totalSuccess||0,d.totalError||0];pChart.update('none')}
+    const ep2=d.totalRequests>0?((d.totalError/d.totalRequests)*100).toFixed(1):'0.0';
     document.getElementById('pie-sp').textContent=sp;
-    document.getElementById('pie-ep').textContent=epct;
+    document.getElementById('pie-ep').textContent=ep2;
 
-    // quota bars
+    // quota
     const qg=document.getElementById('quota-grid');
     if(!d.keys||!d.keys.length){
-      qg.innerHTML='<div class="empty" style="padding:.5rem 0"><span>◎</span>No keys yet — <a href="/keys" style="color:var(--blue)">add one</a></div>';
+      qg.innerHTML='<div class="empty">No keys yet — <a href="/keys" style="color:var(--blue)">add one</a></div>';
     } else {
       qg.innerHTML=d.keys.map(k=>{
-        const pc=k.pct_used||0;
-        const col=pctColor(pc);
-        const badge=k.is_active?'<span style="color:var(--green);font-size:.65rem">● Active</span>':'<span style="color:var(--muted);font-size:.65rem">○ Off</span>';
-        return`<div style="display:grid;grid-template-columns:130px 1fr 90px 60px;align-items:center;gap:12px">
-          <span style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k.label}</span>
-          <div style="background:var(--surface3);border-radius:4px;height:8px;overflow:hidden">
-            <div style="width:${Math.min(pc,100)}%;height:100%;border-radius:4px;background:${col};transition:width .3s"></div>
-          </div>
-          <span style="font-family:JetBrains Mono,monospace;font-size:.72rem;color:var(--muted)">${k.used_today}/${k.daily_limit} (${pc}%)</span>
-          ${badge}
-        </div>`;
+        const pc=k.pct_used||0,col=pctCol(pc);
+        const badge=k.is_active?'<span class="badge badge-ok">● Active</span>':'<span class="badge badge-off">○ Off</span>';
+        return`<div class="quota-row">
+          <span class="quota-label" title="${k.label}">${k.label}</span>
+          <div class="quota-track"><div class="quota-fill" style="width:${Math.min(pc,100)}%;background:${col}"></div></div>
+          <span class="quota-meta">${k.used_today}/${k.daily_limit} (${pc}%)</span>
+          ${badge}</div>`;
       }).join('');
     }
 
-    // endpoint table
+    // endpoints table
     const tbody=document.getElementById('ep-tbody');
-    const maxH=d.topEndpoints&&d.topEndpoints.length>0?d.topEndpoints[0].hits:1;
     if(!d.topEndpoints||!d.topEndpoints.length){
-      tbody.innerHTML='<tr><td colspan="7" class="empty"><span>◎</span>No hits yet</td></tr>';
+      tbody.innerHTML='<tr><td colspan="7" class="empty">No hits yet</td></tr>';
     } else {
+      const mx=d.topEndpoints[0].hits;
       tbody.innerHTML=d.topEndpoints.map(ep=>{
-        const pct=maxH>0?Math.round((ep.hits/maxH)*100):0;
-        const ec=parseFloat(ep.errorRate)>20?'num-red':parseFloat(ep.errorRate)>5?'num-amber':'num-green';
+        const pct=mx>0?Math.round((ep.hits/mx)*100):0;
+        const ec=parseFloat(ep.errorRate)>20?'nr':parseFloat(ep.errorRate)>5?'na':'ng';
         return`<tr>
           <td><span class="ep-name">${ep.name}</span></td>
-          <td><span class="num num-blue">${fmt(ep.hits)}</span></td>
-          <td><span class="num num-green">${fmt(ep.success)}</span></td>
-          <td><span class="num num-red">${fmt(ep.error)}</span></td>
-          <td><span class="num num-amber">${ep.avgLatencyMs}</span></td>
+          <td><span class="num nb">${fmt(ep.hits)}</span></td>
+          <td><span class="num ng">${fmt(ep.success)}</span></td>
+          <td><span class="num nr">${fmt(ep.error)}</span></td>
+          <td><span class="num na">${ep.avgLatencyMs}</span></td>
           <td><span class="num ${ec}">${ep.errorRate}%</span></td>
-          <td class="bar-cell"><div class="mini-bar"><div class="mini-bar-fill" style="width:${pct}%"></div></div></td>
+          <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${pct}%"></div></div></td>
         </tr>`;
       }).join('');
     }
 
-    // status codes
+    // status
     const sg=document.getElementById('status-grid');
     if(!d.statusDist||!d.statusDist.length){
-      sg.innerHTML='<div class="empty" style="padding:1rem 0"><span>◎</span>No data</div>';
+      sg.innerHTML='<div class="empty">No data</div>';
     } else {
-      const maxC=d.statusDist[0].count;
+      const mc=d.statusDist[0].count;
       sg.innerHTML=d.statusDist.map(s=>{
-        const cls=scClass(s.code);
-        const pct=maxC>0?Math.round((s.count/maxC)*100):0;
+        const cls=scClass(s.code),pct=mc>0?Math.round((s.count/mc)*100):0;
         return`<div class="status-row">
-          <span class="status-code sc-${cls}">${s.code}</span>
-          <div class="status-bar"><div class="status-bar-fill sc-${cls}-fill" style="width:${pct}%"></div></div>
-          <span class="status-count">${fmt(s.count)}</span>
+          <span class="sc-code sc-${cls}">${s.code}</span>
+          <div class="sc-bar"><div class="sc-fill sc-${cls}-fill" style="width:${pct}%"></div></div>
+          <span class="sc-cnt">${fmt(s.count)}</span>
         </div>`;
       }).join('');
     }
 
     // recent log
     const rl=document.getElementById('recent-log');
-    document.getElementById('recent-count').textContent=(d.recentRequests||[]).length;
+    document.getElementById('recent-cnt').textContent=(d.recentRequests||[]).length;
     if(!d.recentRequests||!d.recentRequests.length){
-      rl.innerHTML='<div class="empty" style="padding:2rem 0"><span>◎</span>No recent requests</div>';
+      rl.innerHTML='<div class="empty">No requests yet</div>';
     } else {
       rl.innerHTML=d.recentRequests.map(r=>`
         <div class="log-row">
-          <span class="log-time">${fmtTime(r.time)}</span>
+          <span class="log-time">${fmtT(r.time)}</span>
           <span class="log-ep">${r.endpoint}</span>
           <span class="log-key">${r.keyLabel}</span>
-          <span class="log-status ${r.success?'log-ok':'log-err'}">${r.statusCode||'ERR'}</span>
+          <span class="log-s ${r.success?'log-ok':'log-err'}">${r.statusCode}</span>
           <span class="log-lat">${r.latencyMs}ms</span>
         </div>`).join('');
     }
   }
 
-  // CSV helpers
-  function toCSV(headers,rows){
-    return[headers.join(','),...rows.map(r=>r.map(c=>{
-      const s=String(c==null?'':c);
-      return(s.includes(',')||s.includes('"'))?'"'+s.replace(/"/g,'""')+'"':s;
-    }).join(','))].join('\n');
-  }
-  function dlCSV(name,csv){
-    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:name});
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-  }
-
-  function fetchData(){
-    fetch('/analytics/data',{headers:{Authorization:'Bearer '+TOKEN}})
-      .then(r=>r.json()).then(d=>{snap=d;update(d);}).catch(e=>console.warn('fetch err',e));
-  }
-
-  function startCountdown(){
-    countdown=15;clearInterval(timer);
-    timer=setInterval(()=>{
-      countdown--;
-      document.getElementById('refresh-timer').textContent='Refreshing in '+countdown+'s';
-      if(countdown<=0){countdown=15;fetchData();}
-    },1000);
-  }
+  // CSV
+  function toCSV(h,rows){return[h.join(','),...rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return s.includes(',')?'"'+s+'"':s}).join(','))].join('\n')}
+  function dlCSV(name,csv){const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:name});document.body.appendChild(a);a.click();document.body.removeChild(a)}
 
   document.getElementById('export-csv').onclick=()=>{
     if(!snap)return;
-    const now=new Date().toISOString().slice(0,10);
-    let csv='# Summary\n'+toCSV(['Metric','Value'],[
-      ['total_requests',snap.totalRequests],['total_success',snap.totalSuccess],
-      ['total_errors',snap.totalError],['error_rate',snap.errorRate],
-      ['unique_ips',snap.uniqueIps],['avg_latency_ms',snap.avgLatency],
-    ]);
-    if(snap.topEndpoints&&snap.topEndpoints.length){
-      csv+='\n\n# Endpoints\n'+toCSV(['Endpoint','Hits','OK','Err','AvgMs','ErrPct'],
-        snap.topEndpoints.map(e=>[e.name,e.hits,e.success,e.error,e.avgLatencyMs,e.errorRate]));
-    }
-    dlCSV('analytics-'+now+'.csv',csv);
+    let csv='# Summary\n'+toCSV(['Metric','Value'],[['total',snap.totalRequests],['success',snap.totalSuccess],['errors',snap.totalError],['error_rate',snap.errorRate],['avg_ms',snap.avgLatency]]);
+    if(snap.topEndpoints&&snap.topEndpoints.length)csv+='\n\n# Endpoints\n'+toCSV(['Endpoint','Hits','OK','Err','AvgMs'],snap.topEndpoints.map(e=>[e.name,e.hits,e.success,e.error,e.avgLatencyMs]));
+    dlCSV('analytics-'+new Date().toISOString().slice(0,10)+'.csv',csv);
   };
-  document.getElementById('csv-ep').onclick=()=>{
-    if(!snap||!snap.topEndpoints)return;
-    dlCSV('endpoints.csv',toCSV(['Endpoint','Hits','OK','Err','AvgMs'],
-      snap.topEndpoints.map(e=>[e.name,e.hits,e.success,e.error,e.avgLatencyMs])));
-  };
-  document.getElementById('csv-recent').onclick=()=>{
-    if(!snap||!snap.recentRequests)return;
-    dlCSV('recent.csv',toCSV(['Time','Endpoint','Key','Status','LatencyMs'],
-      snap.recentRequests.map(r=>[r.time,r.endpoint,r.keyLabel,r.statusCode,r.latencyMs])));
-  };
+  document.getElementById('csv-ep').onclick=()=>{if(!snap||!snap.topEndpoints)return;dlCSV('endpoints.csv',toCSV(['Endpoint','Hits','OK','Err','AvgMs'],snap.topEndpoints.map(e=>[e.name,e.hits,e.success,e.error,e.avgLatencyMs])))};
+  document.getElementById('csv-recent').onclick=()=>{if(!snap||!snap.recentRequests)return;dlCSV('recent.csv',toCSV(['Time','Endpoint','Key','Status','Ms'],snap.recentRequests.map(r=>[r.time,r.endpoint,r.keyLabel,r.statusCode,r.latencyMs])))};
 
-  document.addEventListener('DOMContentLoaded',()=>{
-    initHourly(); initPie();
-    fetchData(); startCountdown();
-  });
+  function fetchData(){
+    fetch('/analytics/data',{headers:{Authorization:'Bearer '+TOKEN}})
+      .then(r=>r.json()).then(d=>{snap=d;update(d)}).catch(e=>console.warn(e));
+  }
+  function startCD(){cd=15;clearInterval(tmr);tmr=setInterval(()=>{cd--;document.getElementById('rtimer').textContent='Refreshing in '+cd+'s';if(cd<=0){cd=15;fetchData()}},1000)}
+
+  document.addEventListener('DOMContentLoaded',()=>{initH();initP();fetchData();startCD()});
 })();
 </script>
 </body>
