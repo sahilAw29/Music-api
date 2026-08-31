@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Keys — Key Rotation Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#030712;--surface:#0d1117;--surface2:#161b22;--surface3:#1c2128;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --text:#e6edf3;--muted:#7d8590;--muted2:#58636d;
+  --green:#3fb950;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;
+  --amber:#e3b341;--accent:#7c3aed;--accent2:#a855f7;--glow:rgba(124,58,237,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+.layout{display:flex;min-height:100vh}
+
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50}
+.sidebar-logo{padding:1.25rem 1.2rem 1rem;border-bottom:1px solid var(--border)}
+.sidebar-logo .mark{font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700;color:var(--accent2);letter-spacing:.1em;text-transform:uppercase}
+.sidebar-logo .owner{font-size:.75rem;color:var(--muted);margin-top:.2rem}
+.sidebar-nav{padding:.75rem .6rem;flex:1}
+.nav-item{display:flex;align-items:center;gap:.65rem;padding:.5rem .7rem;border-radius:8px;font-size:.82rem;color:var(--muted);text-decoration:none;transition:background .15s,color .15s;cursor:pointer;margin-bottom:.15rem;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--glow);color:var(--accent2)}
+.nav-item .icon{width:16px;height:16px;opacity:.7;flex-shrink:0}
+.nav-item.active .icon{opacity:1}
+.sidebar-footer{padding:.75rem 1rem;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted2)}
+
+.main{margin-left:220px;flex:1;padding:1.5rem 1.75rem 3rem}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem;gap:1rem;flex-wrap:wrap}
+.topbar h1{font-size:1.35rem;font-weight:600;letter-spacing:-.02em}
+.topbar-right{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:.4rem;border:none;border-radius:8px;padding:.5rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit;text-decoration:none}
+.btn:hover{opacity:.82}
+.btn-primary{background:var(--accent2);color:#fff}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.25)}
+.btn-danger:hover{background:rgba(248,81,73,.22)}
+.btn-green{background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25)}
+.btn-sm{padding:.28rem .6rem;font-size:.72rem;border-radius:6px}
+
+/* FORM CARD */
+.add-panel{background:var(--surface2);border:1px solid var(--accent);border-radius:12px;padding:1.2rem 1.4rem;display:none;flex-direction:column;gap:1rem;margin-bottom:1rem}
+.add-panel.open{display:flex}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+label.lbl{display:block;font-size:.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem}
+input,select{background:var(--surface3);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:.55rem .85rem;font-size:.85rem;outline:none;width:100%;font-family:'Inter',sans-serif;transition:border-color .15s}
+input:focus{border-color:var(--accent2)}
+
+/* KEY CARDS */
+.key-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.3rem;transition:border-color .2s}
+.key-card:hover{border-color:var(--border2)}
+.key-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem;gap:1rem}
+.key-name{font-weight:700;font-size:.95rem}
+.key-val{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:.2rem}
+.key-meta{font-size:.72rem;color:var(--muted2);font-family:'JetBrains Mono',monospace}
+.badge{display:inline-flex;align-items:center;gap:.3rem;border-radius:20px;padding:.2rem .65rem;font-size:.7rem;font-weight:600}
+.badge-ok{background:rgba(63,185,80,.12);color:var(--green)}
+.badge-off{background:rgba(125,133,144,.12);color:var(--muted)}
+.badge-warn{background:rgba(227,179,65,.12);color:var(--amber)}
+.badge-err{background:rgba(248,81,73,.12);color:var(--red)}
+
+/* PROGRESS */
+.prog-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem}
+.prog-label{font-size:.72rem;color:var(--muted)}
+.prog-pct{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700}
+.prog-wrap{background:var(--surface3);border-radius:4px;height:8px;overflow:hidden}
+.prog-bar{height:100%;border-radius:4px;transition:width .4s}
+
+/* ACTIONS */
+.key-actions{display:flex;align-items:center;gap:.5rem;margin-top:.85rem;flex-wrap:wrap}
+.key-total{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted2);margin-right:auto}
+
+/* TOAST */
+#toast{position:fixed;top:18px;right:22px;padding:.75rem 1.1rem;border-radius:10px;font-weight:600;font-size:.85rem;z-index:999;display:none;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+
+/* STATS ROW */
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
+.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem}
+.sum-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem;font-weight:500}
+.sum-val{font-family:'JetBrains Mono',monospace;font-size:1.4rem;font-weight:700}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.empty-state .icon{font-size:2rem;margin-bottom:.75rem}
+
+@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:1rem}.summary-row{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="mark">⚡ Key Rotator</div>
+    <div class="owner">Shruti API Manager</div>
+  </div>
+  <div class="sidebar-nav">
+    <a class="nav-item" href="/">
+      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="10" width="3" height="5" rx=".5"/><rect x="6" y="6" width="3" height="9" rx=".5"/><rect x="11" y="2" width="3" height="13" rx=".5"/></svg>
+      Analytics
+    </a>
+    <a class="nav-item active" href="/keys">
+      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM6.5 9.5l-5 5"/><path d="M3.5 11.5l2 2"/></svg>
+      API Keys
+    </a>
+    <a class="nav-item" href="/analytics/data" target="_blank">
+      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v12H2zM5 5h6M5 8h6M5 11h3"/></svg>
+      Raw JSON
+    </a>
+    <a class="nav-item" href="/health" target="_blank">
+      <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8h3l2-5 3 10 2-5h4"/></svg>
+      Health
+    </a>
+  </div>
+  <div class="sidebar-footer">Auto-refresh: 30s</div>
+</nav>
+
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.1em">Key Management</div>
+      <h1>API Keys <span style="color:var(--accent2)">Rotation</span></h1>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost" onclick="loadKeys()">↻ Refresh</button>
+      <button class="btn btn-danger btn-sm" onclick="resetAll()">Reset All</button>
+      <button class="btn btn-primary" onclick="toggleAdd()">+ Add Key</button>
+    </div>
+  </div>
+
+  <!-- SUMMARY STATS -->
+  <div class="summary-row">
+    <div class="sum-card"><div class="sum-label">Total Keys</div><div class="sum-val" id="sm-total" style="color:var(--text)">—</div></div>
+    <div class="sum-card"><div class="sum-label">Active</div><div class="sum-val" id="sm-active" style="color:var(--green)">—</div></div>
+    <div class="sum-card"><div class="sum-label">Exhausted Today</div><div class="sum-val" id="sm-exhausted" style="color:var(--red)">—</div></div>
+    <div class="sum-card"><div class="sum-label">Total Capacity</div><div class="sum-val" id="sm-cap" style="color:var(--blue)">—</div></div>
+  </div>
+
+  <!-- ADD FORM -->
+  <div class="add-panel" id="addPanel">
+    <div style="font-weight:700;font-size:1rem">New Shruti API Key</div>
+    <div class="form-grid">
+      <div><label class="lbl">Label</label><input id="f-label" placeholder="Shruti-Key-3" /></div>
+      <div><label class="lbl">Key Value</label><input id="f-key" placeholder="ShrutiBotsXXXXXXXXXXX" /></div>
+    </div>
+    <div style="max-width:220px"><label class="lbl">Daily Limit (default: 100)</label><input id="f-limit" type="number" value="100" /></div>
+    <div style="display:flex;gap:.6rem">
+      <button class="btn btn-primary" onclick="addKey()">Save Key</button>
+      <button class="btn btn-ghost" onclick="toggleAdd()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- KEYS LIST -->
+  <div id="keysList" style="display:flex;flex-direction:column;gap:.85rem"></div>
+</main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  const TOKEN='zqinx-admin-6767';
+
+  function toast(msg,ok=true){
+    const t=document.getElementById('toast');
+    t.textContent=msg;
+    t.style.background=ok?'var(--green)':'var(--red)';
+    t.style.color='#fff';
+    t.style.display='block';
+    setTimeout(()=>t.style.display='none',3000);
+  }
+  async function api(path,opts={}){
+    const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN,...(opts.headers||{})}});
+    if(!r.ok)throw new Error(await r.text());
+    return r.json();
+  }
+  function pctColor(p){return p>=90?'var(--red)':p>=60?'var(--amber)':'var(--green)';}
+
+  async function loadKeys(){
+    try{
+      const keys=await api('/admin/keys');
+      const total=keys.length, active=keys.filter(k=>k.is_active).length;
+      const exhausted=keys.filter(k=>k.is_active&&k.pct_used>=100).length;
+      const cap=keys.filter(k=>k.is_active).reduce((s,k)=>s+k.daily_limit,0);
+
+      document.getElementById('sm-total').textContent=total;
+      document.getElementById('sm-active').textContent=active;
+      document.getElementById('sm-exhausted').textContent=exhausted;
+      document.getElementById('sm-cap').textContent=cap+'/day';
+
+      const list=document.getElementById('keysList');
+      if(!keys.length){
+        list.innerHTML=`<div class="empty-state"><div class="icon">🔑</div><div>No keys yet. Add your first Shruti API key above.</div></div>`;
+        return;
+      }
+      list.innerHTML='';
+      keys.forEach(k=>list.appendChild(buildCard(k)));
+    } catch(e){toast('Load failed: '+e.message,false);}
+  }
+
+  function buildCard(k){
+    const div=document.createElement('div');
+    div.className='key-card';
+    div.id='card-'+k.id;
+    const pc=k.pct_used||0;
+    const col=pctColor(pc);
+    const exhausted=pc>=100&&k.is_active;
+    const badgeClass=!k.is_active?'badge-off':exhausted?'badge-err':pc>=60?'badge-warn':'badge-ok';
+    const badgeText=!k.is_active?'Disabled':exhausted?'Exhausted':pc>=60?'Low quota':'Active';
+
+    div.innerHTML=`
+      <div class="key-head">
+        <div>
+          <div class="key-name">${escHtml(k.label)}</div>
+          <div class="key-val">${escHtml(k.key_value.slice(0,14))}${'•'.repeat(Math.max(0,k.key_value.length-14))}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        </div>
+      </div>
+      <div class="prog-row">
+        <span class="prog-label">${k.used_today} of ${k.daily_limit} used today</span>
+        <span class="prog-pct" style="color:${col}">${pc}%</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(pc,100)}%;background:${col}"></div></div>
+      <div class="key-actions">
+        <span class="key-total">Total hits: ${k.total_used} &nbsp;·&nbsp; ID: <span style="color:var(--purple)">${k.id}</span></span>
+        <button class="btn btn-green btn-sm" onclick="resetKey('${k.id}')">↺ Reset</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleActive('${k.id}',${k.is_active})">${k.is_active?'Disable':'Enable'}</button>
+        <button class="btn btn-ghost btn-sm" onclick="editLimit('${k.id}','${escHtml(k.label)}',${k.daily_limit})">Edit Limit</button>
+        <button class="btn btn-danger btn-sm" onclick="delKey('${k.id}')">Delete</button>
+      </div>`;
+    return div;
+  }
+
+  function escHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+  function toggleAdd(){
+    const p=document.getElementById('addPanel');
+    p.classList.toggle('open');
+  }
+
+  async function addKey(){
+    const label=document.getElementById('f-label').value.trim();
+    const kv=document.getElementById('f-key').value.trim();
+    const lim=parseInt(document.getElementById('f-limit').value)||100;
+    if(!label||!kv){toast('Fill label and key value',false);return;}
+    try{
+      await api('/admin/keys',{method:'POST',body:JSON.stringify({label,key_value:kv,daily_limit:lim})});
+      toast('Key added ✓');
+      document.getElementById('addPanel').classList.remove('open');
+      document.getElementById('f-label').value='';
+      document.getElementById('f-key').value='';
+      document.getElementById('f-limit').value='100';
+      loadKeys();
+    }catch(e){toast('Error: '+e.message,false);}
+  }
+
+  async function delKey(id){
+    if(!confirm('Delete this key? This cannot be undone.'))return;
+    try{await api('/admin/keys/'+id,{method:'DELETE'});toast('Deleted');loadKeys();}
+    catch{toast('Delete failed',false);}
+  }
+
+  async function toggleActive(id,active){
+    try{
+      await api('/admin/keys/'+id,{method:'PATCH',body:JSON.stringify({is_active:!active})});
+      toast(active?'Key disabled':'Key enabled');
+      loadKeys();
+    }catch{toast('Update failed',false);}
+  }
+
+  async function resetKey(id){
+    try{await api('/admin/keys/'+id+'/reset',{method:'POST'});toast('Counter reset ✓');loadKeys();}
+    catch{toast('Reset failed',false);}
+  }
+
+  async function resetAll(){
+    if(!confirm('Reset ALL key counters to 0?'))return;
+    try{await api('/admin/reset-all',{method:'POST'});toast('All keys reset ✓');loadKeys();}
+    catch{toast('Failed',false);}
+  }
+
+  async function editLimit(id,label,current){
+    const val=prompt(`New daily limit for "${label}" (current: ${current}):`, current);
+    if(!val)return;
+    const lim=parseInt(val);
+    if(isNaN(lim)||lim<1){toast('Invalid limit',false);return;}
+    try{
+      await api('/admin/keys/'+id,{method:'PATCH',body:JSON.stringify({daily_limit:lim})});
+      toast('Limit updated to '+lim);
+      loadKeys();
+    }catch{toast('Update failed',false);}
+  }
+
+  // expose to onclick
+  window.loadKeys=loadKeys;
+  window.toggleAdd=toggleAdd;
+  window.addKey=addKey;
+  window.delKey=delKey;
+  window.toggleActive=toggleActive;
+  window.resetKey=resetKey;
+  window.resetAll=resetAll;
+  window.editLimit=editLimit;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    loadKeys();
+    setInterval(loadKeys,30000);
+  });
+})();
+</script>
+</body>
+</html>
