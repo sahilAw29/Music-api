@@ -419,10 +419,11 @@ const ALL_EPS = [
 ];
 app.get('/redocs', wrap(async (req, res) => {
   const u = await me(req), B = `${req.protocol}://${req.get('host')}`;
+  const KEY = 'YOUR_KEY';
   const card = ([ep, desc, params, ex]) => `<div class="glass card" id="${ep}"><h3><span class="pill ok">GET</span> /api/${ep}</h3><p>${esc(desc)}</p>
 <div class="sc"><table><tr><th>Param</th><th>Zaroori</th><th>Kya hai</th></tr>${params.map(([n, r, d]) => `<tr><td><code>${n}</code></td><td>${r}</td><td>${esc(d)}</td></tr>`).join('')}</table></div>
-<pre class="cp">${esc(`${B}/api/${ep}?${ex}`)}</pre></div>`;
-  res.send(page('Redocs · Nazriya API', `<div class="wrap docs"><h1>All endpoints</h1><p class="l">Base URL: <code>${esc(B)}</code> · Key header me bhejo: <code>x-api-key</code></p>
+<pre class="cp">${esc(`${B}/api/${ep}?${ex}&key=${KEY}`)}</pre></div>`;
+  res.send(page('Redocs · Nazriya API', `<div class="wrap docs"><h1>All endpoints</h1><p class="l">Base URL: <code>${esc(B)}</code> · <code>YOUR_KEY</code> ki jagah apni key daalo.</p>
 <div class="glass card toc">${ALL_EPS.map(e => `<a href="#${e[0]}">${e[0]}</a>`).join('')}</div>${ALL_EPS.map(card).join('\n')}</div>`, { user: u }));
 }));
 app.use((req, res) => req.accepts('html') ? res.status(404).send(page('Not found · Nazriya API', '<div class="lock"><div class="glass card"><h2>Page not found</h2><p class="mu">This link is wrong or the page moved.</p><a class="btn w" href="/">Go home</a></div></div>')) : res.status(404).json({ error: 'Not found' }));
