@@ -20,7 +20,7 @@ const loadSettings = async () => { const s = await api('settings'); if (!s.error
 async function overview() {
   const d = await api('stats'); if (d.error) return toast(d.error, 'er');
   const w = d.sw;
-  $('#sw').innerHTML = `<div class="row wrapr"><div class="grow"><h3>Quick switch</h3><span class="mu small">Source: <b>${w.useBackup ? 'Backup' : 'Primary'}</b> · API: <b class="${w.maintenance ? 'er' : 'ok'}">${w.maintenance ? 'OFF (maintenance)' : 'ON'}</b></span></div><button class="btn g" data-sw="source">Switch to ${w.useBackup ? 'primary' : 'backup'} source</button><button class="btn ${w.maintenance ? 'ok' : 'r'}" data-sw="maintenance">${w.maintenance ? 'Turn API on' : 'Turn API off'}</button></div>`;
+  $('#sw').innerHTML = `<div class="row wrapr"><div class="grow"><h3>Quick switch</h3><span class="mu small">Source: <b>${w.useBackup ? 'Backup' : 'Primary'}</b> · API: <b class="${w.maintenance ? 'er' : 'ok'}">${w.maintenance ? 'OFF (maintenance)' : 'ON'}</b> · Free API: <b class="${w.freeOff ? 'er' : 'ok'}">${w.freeOff ? 'OFF' : 'ON'}</b></span></div><button class="btn g" data-sw="source">Switch to ${w.useBackup ? 'primary' : 'backup'} source</button><button class="btn ${w.freeOff ? 'ok' : 'r'}" data-sw="free">${w.freeOff ? 'Turn on free API' : 'Turn off free API'}</button><button class="btn ${w.maintenance ? 'ok' : 'r'}" data-sw="maintenance">${w.maintenance ? 'Turn API on' : 'Turn API off'}</button></div>`;
   const t = d.types || {};
   $('#cards').innerHTML = [['Total requests', fmt(d.total)], ['Success', fmt(d.ok), 'ok'], ['Errors', fmt(d.err), 'er'], ['Avg latency', d.avgMs + ' ms'], ['Users', d.users], ['Unique IPs (24h)', d.ips],
     ['Free keys', t.free || 0, 'ok', 'free'], ['Admin keys', t.admin || 0, 'v', 'admin'], ['Audio used', fmt(d.used.a)], ['Video used', fmt(d.used.v)], ['Search used', fmt(d.used.s)]]
@@ -144,7 +144,9 @@ document.addEventListener('click', async e => {
   const nw = t.closest('[data-new]'); if (nw) { if ($('#t-keys').hidden) tab('keys'); return openNew(nw.dataset.new); }
   const f = t.closest('[data-kf]'); if (f) return setKf(f.dataset.kf);
   const go = t.closest('[data-goto]'); if (go) { tab('keys'); return setKf(go.dataset.goto); }
-  const s = t.closest('[data-sw]'); if (s) { const r = await api('switch', 'POST', { what: s.dataset.sw }); if (r.error) toast(r.error, 'er'); else toast('Switched'); return overview(); }
+  const s = t.closest('[data-sw]'); if (s) {
+    const w = s.dataset.sw; if (w === 'free' && s.textContent.includes('off') && !confirm('Turn off free API? Every key users made after login stops working until you turn it back on. Admin and paid keys keep working.')) return;
+    const r = await api('switch', 'POST', { what: w }); if (r.error) toast(r.error, 'er'); else toast(w === 'free' ? (r.freeOff ? 'Free API turned off' : 'Free API turned on') : 'Switched'); return overview(); }
   const u = t.closest('[data-u]');
   if (u) {
     const tr = u.closest('tr'), id = tr.dataset.uid, email = tr.dataset.email, a = u.dataset.u;
