@@ -112,7 +112,7 @@ const SF = ['upstream', 'upstream2', 'defaultRpm', 'freeDays', 'freeAudio', 'fre
 async function settings() {
   const s = await loadSettings(); if (!s.upstream) return;
   for (const k of SF) $('#st-' + k).value = s[k] ?? '';
-  $('#st-maintenance').checked = !!s.maintenance; for (const e of ['audio', 'video', 'search']) $('#st-on-' + e).checked = !(s.off || []).includes(e);
+  $('#st-maintenance').checked = !!s.maintenance; for (const e of ['audio', 'video', 'search', 'flac', 'suggest', 'artist', 'trending']) $('#st-on-' + e).checked = !(s.off || []).includes(e);
 }
 
 /* ── DATABASE ── */
@@ -178,7 +178,7 @@ $('#nk-cp').onclick = async () => { await copyText($('#nk-key').textContent); to
 $('#nk-box').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') createKey(); });
 $('#sv').onclick = async () => {
   const g = i => $('#st-' + i).value;
-  const r = await api('settings', 'POST', { upstream: g('upstream'), upstream2: g('upstream2'), defaultRpm: g('defaultRpm'), freeDays: g('freeDays'), freeAudio: g('freeAudio'), freeVideo: g('freeVideo'), freeSearch: g('freeSearch'), maintenance: $('#st-maintenance').checked, off: ['audio', 'video', 'search'].filter(x => !$('#st-on-' + x).checked) });
+  const r = await api('settings', 'POST', { upstream: g('upstream'), upstream2: g('upstream2'), defaultRpm: g('defaultRpm'), freeDays: g('freeDays'), freeAudio: g('freeAudio'), freeVideo: g('freeVideo'), freeSearch: g('freeSearch'), maintenance: $('#st-maintenance').checked, off: ['audio', 'video', 'search', 'flac', 'suggest', 'artist', 'trending'].filter(x => !$('#st-on-' + x).checked) });
   if (r.error) return toast(r.error, 'er'); S = r.settings || S; toast('Settings saved');
 };
 $('#ra').onclick = async () => { if (confirm('Reset usage of ALL keys?')) { await api('reset-all-usage', 'POST'); toast('All usage reset'); } };
