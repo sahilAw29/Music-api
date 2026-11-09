@@ -20,7 +20,7 @@ const Key = mongoose.model('Key', new S({ key: { type: String, unique: true }, u
 const logSchema = new S({ key: String, email: String, ep: String, q: String, status: Number, ms: Number, ip: String, t: { type: Date, default: Date.now } });
 logSchema.index({ t: 1 }, { expireAfterSeconds: 90 * 86400 }); // logs auto-delete after 90 days
 const Log = mongoose.model('Log', logSchema);
-const Setting = mongoose.model('Setting', new S({ _id: String, upstream: String, upstream2: String, useBackup: Boolean, defaultRpm: Number, freeDays: Number, freeAudio: Number, freeVideo: Number, freeSearch: Number, maintenance: Boolean, off: [String] }));
+const Setting = mongoose.model('Setting', new S({ _id: String, upstream: String, upstream2: String, useBackup: Boolean, defaultRpm: Number, freeDays: Number, freeAudio: Number, freeVideo: Number, freeSearch: Number, maintenance: Boolean, freeOff: Boolean, off: [String] }));
 
 /* ── HELPERS ── */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,9 +35,11 @@ const limiter = (max, ms) => { const m = new Map(); setInterval(() => m.clear(),
 const me = async req => { const p = verify(req.cookies.tk); return p ? User.findById(p.id).select('-hash').lean() : null; };
 const isAdmin = req => verify(req.cookies.ak)?.admin === true;
 let cache = null, at = 0;
-const getSet = async () => { if (cache && Date.now() - at < 10000) return cache; const d = { ...DEFAULTS, ...((await Setting.findById('main').lean()) || {}) }; d.off = d.off || []; cache = d; at = Date.now(); return cache; };
+const getSet = async () => { if (cache && Date.now() - at < 10000) return cache; const d = { ...DEFAULTS, ...((await Setting.findById('main').lean()) || {}) }; d.off = d.off || []; d.freeOff = !!d.freeOff; cache = d; at = Date.now(); return cache; };
 let buf = []; const flush = () => { if (!buf.length) return; const b = buf; buf = []; Log.insertMany(b, { ordered: false }).catch(() => {}); };
 setInterval(flush, 3000).unref(); const log = e => { buf.push(e); if (buf.length > 200) flush(); };
+const isUserFree = k => k.plan === 'free' && k.createdBy !== 'admin'; // keys users made themselves after login
+const FREE_OFF = () => `Our API service is currently disabled. Please contact @${DEV} to purchase a Paid API subscription and activate your access.`;
 const num = v => Number.isFinite(parseFloat(v)) ? parseFloat(v) : 0; // 0 or negative = unlimited
 const lim = (v, d) => v === '' || v == null ? d : num(v);
 const keyCounts = async () => { const r = await Key.aggregate([{ $group: { _id: { $cond: [{ $eq: ['$plan', 'free'] }, 'free', { $cond: [{ $eq: ['$createdBy', 'admin'] }, 'admin', 'other'] }] }, n: { $sum: 1 } } }]); const o = { free: 0, admin: 0, other: 0 }; r.forEach(x => o[x._id] = x.n); o.all = o.free + o.admin + o.other; return o; };
@@ -73,6 +75,7 @@ app.get('/api/:ep', async (req, res) => {
     if (!k) return done(401, { error: 'API key missing. Pass ?key=YOUR_KEY or x-api-key header.' });
     kd = await getKey(k);
     if (!kd) return done(401, { error: 'Invalid API key.' });
+    if (s.freeOff && isUserFree(kd)) return done(403, { status: 'API_DISABLED', error: FREE_OFF() });
     if (!kd.active) return done(403, { error: `API key disabled. Contact @${DEV}.` });
     if (kd.expiresAt && new Date(kd.expiresAt) < new Date()) return done(403, { error: `API key expired. Contact @${DEV} for renewal.` });
     if (!q) return done(400, { error: 'Missing q parameter.' });
@@ -124,8 +127,8 @@ app.post('/auth/google', slow, async (req, res) => {
 app.get('/logout', (req, res) => { res.clearCookie('tk'); res.redirect('/'); });
 app.post('/keys/create', async (req, res) => {
   const u = await me(req); if (!u) return res.status(401).json({ error: 'Log in first.' });
+  const s = await getSet(); if (s.freeOff) return res.status(403).json({ status: 'API_DISABLED', error: FREE_OFF() });
   if (await Key.exists({ $or: [{ user: u._id }, { email: u.email }], plan: 'free' })) return res.status(409).json({ error: 'You already have a free key.' });
-  const s = await getSet();
   await Key.create({ key: newKey(), name: String(req.body.name || '').trim().slice(0, 40) || 'My API key', user: u._id, email: u.email, plan: 'free', limits: { audio: s.freeAudio, video: s.freeVideo, search: s.freeSearch }, rpm: s.defaultRpm, expiresAt: new Date(Date.now() + s.freeDays * 864e5) });
   res.json({ ok: true });
 });
@@ -178,7 +181,7 @@ app.post(AP + '/login', limiter(8, 60000), (req, res) => {
   setCookie(req, res, 'ak', sign({ admin: true }, ADMIN_DAYS + 'd'), ADMIN_DAYS); res.json({ ok: true });
 });
 app.get(AP + '/logout', (req, res) => { res.clearCookie('ak'); res.redirect(AP); });
-const swState = async () => { const s = await getSet(); return { useBackup: !!s.useBackup, hasBackup: !!s.upstream2, maintenance: !!s.maintenance }; };
+const swState = async () => { const s = await getSet(); return { useBackup: !!s.useBackup, hasBackup: !!s.upstream2, maintenance: !!s.maintenance, freeOff: !!s.freeOff }; };
 const A = express.Router(); app.use(AP + '/api', (req, res, next) => isAdmin(req) ? next() : res.status(401).json({ error: 'admin only' }), (req, res, next) => { res.set('Cache-Control', 'no-store'); if (req.method !== 'GET') kc.clear(); next(); }, A);
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 A.get('/stats', wrap(async (req, res) => {
@@ -234,9 +237,11 @@ A.post('/users/:id/reset-usage', wrap(async (req, res) => { const u = await User
 A.post('/reset-all-usage', wrap(async (req, res) => { await Key.updateMany({}, { $set: { used: { audio: 0, video: 0, search: 0 } } }); res.json({ ok: true }); }));
 A.delete('/logs', wrap(async (req, res) => { flush(); await Log.deleteMany({}); res.json({ ok: true }); }));
 A.post('/switch', wrap(async (req, res) => { // one-click global switches
-  const s = await getSet(), m = req.body.what === 'maintenance';
-  if (!m && !s.upstream2) return res.status(400).json({ error: 'Set a backup upstream URL in Settings first.' });
-  await Setting.findByIdAndUpdate('main', m ? { maintenance: !s.maintenance } : { useBackup: !s.useBackup }, { upsert: true }); cache = null; res.json(await swState());
+  const s = await getSet(), w = req.body.what;
+  if (w === 'source' && !s.upstream2) return res.status(400).json({ error: 'Set a backup upstream URL in Settings first.' });
+  const upd = w === 'maintenance' ? { maintenance: !s.maintenance } : w === 'free' ? { freeOff: !s.freeOff } : w === 'source' ? { useBackup: !s.useBackup } : null;
+  if (!upd) return res.status(400).json({ error: 'Unknown switch.' });
+  await Setting.findByIdAndUpdate('main', upd, { upsert: true }); cache = null; res.json(await swState());
 }));
 /* DB manager */
 const COLS = { users: User, keys: Key, logs: Log, settings: Setting }, isOid = id => /^[a-f0-9]{24}$/i.test(id), oid = id => isOid(id) ? new mongoose.Types.ObjectId(id) : id;
@@ -313,12 +318,14 @@ app.get('/dashboard', wrap(async (req, res) => {
 <div class="keybox"><code data-full="${esc(k.key)}" data-mask="${esc(mask(k.key))}">${esc(mask(k.key))}</code><button class="btn g s" data-reveal aria-label="Show key">Show</button></div><button class="btn w" data-copy="${esc(k.key)}">Copy API key</button>
 <p class="mu small">${left == null ? 'Never expires' : exp ? 'Expired ' + k.expiresAt.toISOString().slice(0, 10) : `${left} day${left === 1 ? '' : 's'} left (${k.expiresAt.toISOString().slice(0, 10)})`} · ${k.rpm || 30} requests/min</p>
 ${bar('Audio', k.used?.audio, k.limits?.audio)}${bar('Video', k.used?.video, k.limits?.video)}${bar('Search', k.used?.search, k.limits?.search)}</div>`; }).join('');
-  const tk = keys.find(k => k.active && !(k.expiresAt && k.expiresAt < now));
+  const s = await getSet();
+  const notice = s.freeOff ? `<div class="glass card notice"><h3>Free API is turned off</h3><p class="mu">${esc(FREE_OFF())}</p></div>` : '';
+  const tk = keys.find(k => k.active && !(k.expiresAt && k.expiresAt < now) && !(s.freeOff && isUserFree(k)));
   const tester = tk ? `<div class="glass card" id="tester" data-key="${esc(tk.key)}"><h3>Try it</h3><p class="mu">Runs a real request with <b>${esc(tk.name)}</b>. It counts toward your quota.</p>
 <div class="row wrapr"><select aria-label="Endpoint"><option value="search">search</option><option value="audio">audio</option><option value="video">video</option></select><input class="grow" placeholder="Song name, e.g. aarzu" aria-label="Song name"><button class="btn">Run</button></div><div class="out"></div><pre hidden></pre>
 <h3 class="mt">Your request</h3><pre class="cp">curl "${esc(B)}/api/search?q=aarzu" -H "x-api-key: ${esc(tk.key)}"</pre></div>` : '';
   res.send(page('Dashboard · Nazriya API', `<div class="wrap dash"><div class="hi"><h2>Hi, ${esc(u.name)}</h2><p class="mu">${esc(u.email)}</p></div>
-<div class="dgrid"><div class="stack">${cards || '<div class="glass card"><h3>Create your API key</h3><p class="mu">Free plan, ready instantly.</p><label for="kn">Key name (optional)</label><input id="kn" maxlength="40" placeholder="e.g. My Music Bot"><button class="btn w" id="mk">Create free key</button><div class="msg" id="msg" role="alert"></div></div>'}</div>${tester}</div><div class="glass card"><h3>Need more requests?</h3><p class="mu">Paid API ke liye contact karo <a href="https://t.me/${esc(DEV)}">@${esc(DEV)}</a>. <a href="/docs">Read the docs</a> to see every endpoint.</p></div></div>`, { user: u }));
+${notice}<div class="dgrid"><div class="stack">${cards || '<div class="glass card"><h3>Create your API key</h3><p class="mu">Free plan, ready instantly.</p><label for="kn">Key name (optional)</label><input id="kn" maxlength="40" placeholder="e.g. My Music Bot"><button class="btn w" id="mk">Create free key</button><div class="msg" id="msg" role="alert"></div></div>'}</div>${tester}</div><div class="glass card"><h3>Need more requests?</h3><p class="mu">Paid API ke liye contact karo <a href="https://t.me/${esc(DEV)}">@${esc(DEV)}</a>. <a href="/docs">Read the docs</a> to see every endpoint.</p></div></div>`, { user: u }));
 }));
 app.get('/docs', wrap(async (req, res) => {
   const [u, s] = await Promise.all([me(req), getSet()]), B = `${req.protocol}://${req.get('host')}`;
