@@ -361,7 +361,7 @@ ${sec('video', 'Returns the playable video for a song. Use it for video players 
 <div class="glass card" id="errors"><h3>Errors</h3><div class="sc"><table><tr><th>Code</th><th>Meaning</th></tr><tr><td>400</td><td>Missing <code>q</code></td></tr><tr><td>401</td><td>Missing or invalid key</td></tr><tr><td>403</td><td>Key expired or disabled</td></tr><tr><td>429</td><td>Quota finished or rate limit hit</td></tr><tr><td>502 / 503</td><td>Source error or endpoint disabled</td></tr></table></div>${code('{ "success": false, "error": "Invalid API key." }')}</div></div>`, { user: u }));
 }));
 
-/* ── /redocs: full API reference (ReDoc) for ALL endpoints, old + new. Spec lives at /openapi.json ── */
+/* ── /openapi.json: machine-readable spec (Postman import) ── */
 const openapi = (B, s) => {
   const P = {
     q: (d, ex) => ({ name: 'q', in: 'query', required: true, description: d, schema: { type: 'string', maxLength: 200 }, example: ex }),
@@ -407,16 +407,24 @@ const openapi = (B, s) => {
   };
 };
 app.get('/openapi.json', wrap(async (req, res) => { res.set('Access-Control-Allow-Origin', '*').json(openapi(`${req.protocol}://${req.get('host')}`, await getSet())); }));
-const REDOC_OPTS = { hideDownloadButton: false, expandResponses: '200', requiredPropsFirst: true, sortPropsAlphabetically: false, pathInMiddlePanel: true,
-  theme: { colors: { primary: { main: '#ff5e8a' } }, typography: { fontFamily: 'Manrope, system-ui, sans-serif', headings: { fontFamily: '"Bricolage Grotesque", Manrope, sans-serif' }, code: { fontFamily: '"JetBrains Mono", ui-monospace, monospace' } },
-    sidebar: { backgroundColor: '#120d1a', textColor: '#f3eef8', activeTextColor: '#ff5e8a' }, rightPanel: { backgroundColor: '#1c1426' } } };
-app.get('/redocs', (req, res) => res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#120d1a"><title>Redocs · Nazriya API</title><link rel="icon" href="${FAV}">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>body{margin:0}.top{display:flex;gap:16px;align-items:center;padding:10px 18px;background:#120d1a;font:600 14px Manrope,system-ui,sans-serif}.top a{color:#f3eef8;text-decoration:none}.top a:first-child{color:#ff5e8a;font-weight:800;margin-right:auto}</style></head>
-<body><div class="top"><a href="/">Nazriya API</a><a href="/docs">Docs</a><a href="/dashboard">Dashboard</a><a href="/openapi.json">openapi.json</a></div><div id="redoc"></div>
-<script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"></script>
-<script>Redoc.init('/openapi.json', ${JSON.stringify(REDOC_OPTS)}, document.getElementById('redoc'))</script></body></html>`));
-
+// /redocs: simple list of ALL endpoints (old + new), sirf kaam ki cheez
+const ALL_EPS = [
+  ['search',   'Song search karo, results list milegi.',          [['q', 'Haan', 'Song / artist ka naam']], 'q=aarzu'],
+  ['audio',    'Song ka audio stream. Seeking supported.',        [['q', 'Haan', 'Song ka naam']], 'q=aarzu'],
+  ['video',    'Song ka video stream. Seeking supported.',        [['q', 'Haan', 'Song ka naam']], 'q=aarzu'],
+  ['flac',     'Song lossless FLAC quality me. Seeking supported.', [['q', 'Haan', 'Song ka naam']], 'q=Ishq'],
+  ['suggest',  'Type karte waqt search suggestions.',             [['q', 'Haan', 'Jo text type kiya'], ['hl', 'Nahi', 'Language, default en']], 'q=arijit&hl=en'],
+  ['artist',   'Artist ki info aur uske songs.',                  [['name', 'Haan', 'Artist ka naam']], 'name=arijit+singh'],
+  ['trending', 'Abhi trending songs.',                            [['n', 'Nahi', 'Kitne songs (1–100)']], 'n=20']
+];
+app.get('/redocs', wrap(async (req, res) => {
+  const u = await me(req), B = `${req.protocol}://${req.get('host')}`;
+  const card = ([ep, desc, params, ex]) => `<div class="glass card" id="${ep}"><h3><span class="pill ok">GET</span> /api/${ep}</h3><p>${esc(desc)}</p>
+<div class="sc"><table><tr><th>Param</th><th>Zaroori</th><th>Kya hai</th></tr>${params.map(([n, r, d]) => `<tr><td><code>${n}</code></td><td>${r}</td><td>${esc(d)}</td></tr>`).join('')}</table></div>
+<pre class="cp">${esc(`${B}/api/${ep}?${ex}`)}</pre></div>`;
+  res.send(page('Redocs · Nazriya API', `<div class="wrap docs"><h1>All endpoints</h1><p class="l">Base URL: <code>${esc(B)}</code> · Key header me bhejo: <code>x-api-key</code></p>
+<div class="glass card toc">${ALL_EPS.map(e => `<a href="#${e[0]}">${e[0]}</a>`).join('')}</div>${ALL_EPS.map(card).join('\n')}</div>`, { user: u }));
+}));
 app.use((req, res) => req.accepts('html') ? res.status(404).send(page('Not found · Nazriya API', '<div class="lock"><div class="glass card"><h2>Page not found</h2><p class="mu">This link is wrong or the page moved.</p><a class="btn w" href="/">Go home</a></div></div>')) : res.status(404).json({ error: 'Not found' }));
 app.use((err, req, res, next) => { console.error(err); if (res.headersSent) return res.destroy(); res.status(500).json({ error: 'Server error' }); });
 mongoose.connect(MONGO_URI, { maxPoolSize: 20 }).then(() => app.listen(PORT, () => console.log(`Running on http://localhost:${PORT}  ·  admin: http://localhost:${PORT}${AP}`))).catch(e => { console.error('Mongo error:', e.message); process.exit(1); });
