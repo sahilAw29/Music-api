@@ -48,10 +48,15 @@ if (mk) mk.onclick = async () => {
 const T = document.getElementById('tester');
 if (T) {
   const sel = T.querySelector('select'), inp = T.querySelector('input'), btn = T.querySelector('.row .btn'), out = T.querySelector('.out'), pre = T.querySelector('pre:not(.cp)');
+  // each endpoint's main param + input hint
+  const PARAM = { artist: 'name', trending: 'n' };
+  const HINT = { search: 'Song name, e.g. aarzu', audio: 'Song name, e.g. aarzu', video: 'Song name, e.g. aarzu', flac: 'Song name, e.g. ishq', suggest: 'Text, e.g. arijit', artist: 'Artist name, e.g. arijit singh', trending: 'How many songs, e.g. 20 (optional)' };
+  sel.onchange = () => { inp.placeholder = HINT[sel.value] || ''; };
   const run = async () => {
-    const ep = sel.value, q = inp.value.trim(); if (!q) return inp.focus();
+    const ep = sel.value, q = inp.value.trim(); if (!q && ep !== 'trending') return inp.focus();
     btn.disabled = true; out.innerHTML = '<span class="mu">Loading…</span>'; pre.hidden = true;
-    const url = `/api/${ep}?q=${encodeURIComponent(q)}`, ac = new AbortController();
+    let qs = q ? `${PARAM[ep] || 'q'}=${encodeURIComponent(q)}` : ''; if (ep === 'suggest') qs += '&hl=en';
+    const url = `/api/${ep}` + (qs ? '?' + qs : ''), ac = new AbortController();
     try {
       const r = await fetch(url, { headers: { 'x-api-key': T.dataset.key }, signal: ac.signal }), ct = r.headers.get('content-type') || '';
       const tag = `<span class="pill ${r.ok ? 'ok' : 'er'}">HTTP ${r.status}</span> `;
@@ -61,7 +66,7 @@ if (T) {
       } else {
         ac.abort(); // the player loads it again with seeking support (free, no extra quota)
         const m = document.createElement(ep === 'video' ? 'video' : 'audio'); m.controls = true; m.preload = 'metadata';
-        m.src = url + '&key=' + encodeURIComponent(T.dataset.key); out.innerHTML = tag + `<span class="mu">${ct}</span>`; out.appendChild(m);
+        m.src = url + (qs ? '&' : '?') + 'key=' + encodeURIComponent(T.dataset.key); out.innerHTML = tag + `<span class="mu">${ct}</span>`; out.appendChild(m);
       }
     } catch { out.innerHTML = '<span class="er">Network error, try again.</span>'; }
     btn.disabled = false;
