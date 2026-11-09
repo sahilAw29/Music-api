@@ -51,7 +51,7 @@ const FOOT = `<footer>Built by <a href="https://t.me/${esc(DEV)}">@${esc(DEV)}</
 const page = (title, body, { user, script = '', src = [], head = '', nav = true, attr = '' } = {}) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#120d1a"><title>${esc(title)}</title>
 <link rel="icon" href="${FAV}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=${V}">${head}</head><body${attr}>
-${nav ? `<nav class="glass"><a class="brand" href="/">${ICON}Nazriya API</a><a class="h" href="/">Home</a><a href="/docs">Docs</a>${user ? '<a href="/dashboard">Dashboard</a><a href="/logout">Log out</a>' : '<a class="btn s" href="/login">Get API key</a>'}</nav>` : ''}
+${nav ? `<nav class="glass"><a class="brand" href="/">${ICON}Nazriya API</a><a class="h" href="/">Home</a><a href="/docs">Docs</a><a href="/redocs">Redocs</a>${user ? '<a href="/dashboard">Dashboard</a><a href="/logout">Log out</a>' : '<a class="btn s" href="/login">Get API key</a>'}</nav>` : ''}
 <main>${body}</main>${nav ? FOOT : ''}<script src="/app.js?v=${V}"></script>${src.map(s => `<script src="${s}"></script>`).join('')}${script ? `<script>${script}</script>` : ''}</body></html>`;
 
 /* ── KEY-PROTECTED API ── */
@@ -62,14 +62,29 @@ const paid = new Map(); setInterval(() => { const n = Date.now(); for (const [k,
 const kc = new Map(); setInterval(() => { const n = Date.now(); for (const [k, v] of kc) if (v.exp < n) kc.delete(k); }, 60000).unref();
 const getKey = async k => { const c = kc.get(k); if (c && c.exp > Date.now()) return c.d; const d = await Key.findOne({ key: k }).lean(); if (d) kc.set(k, { d, exp: Date.now() + 5000 }); return d; };
 // CORS: lets websites/web apps call the API straight from the browser
+// read only the params this endpoint allows, cleaned. Returns { o, qs, q } (q = short text for logs)
+const readParams = (def, query) => {
+  const o = {};
+  for (const p of def.params) {
+    let v = String(query[p] ?? '').trim(); if (!v) continue;
+    if (p === 'n') { const n = parseInt(v, 10); if (!Number.isFinite(n)) continue; v = String(Math.min(100, Math.max(1, n))); }
+    else if (p === 'hl') { if (!/^[A-Za-z-]{2,10}$/.test(v)) continue; }
+    else v = v.slice(0, 200);
+    o[p] = v;
+  }
+  const keys = Object.keys(o), qs = new URLSearchParams(o).toString();
+  return { o, qs, q: keys.length === 1 && o.q ? o.q : keys.map(k => k + '=' + o[k]).join('&') };
+};
+const EP_LIST = Object.keys(EP).join(', ');
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-api-key, range, content-type', 'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length, Retry-After' };
 app.options('/api/:ep', (req, res) => res.set({ ...CORS, 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Max-Age': '86400' }).sendStatus(204));
 app.get('/api/:ep', async (req, res) => {
   res.set(CORS);
-  const ep = req.params.ep, t0 = Date.now(), ip = req.ip, q = String(req.query.q || '').slice(0, 200), k = String(req.query.key || req.get('x-api-key') || '').trim(); let kd = null;
+  const ep = req.params.ep, t0 = Date.now(), ip = req.ip, k = String(req.query.key || req.get('x-api-key') || '').trim(); let kd = null, q = '';
   const done = (status, body, hdr) => { log({ key: k.slice(0, 12), email: kd?.email, ep, q, status, ms: Date.now() - t0, ip }); if (hdr) res.set(hdr); return res.status(status).json({ success: false, ...body }); };
   try {
-    if (!EP[ep]) return done(404, { error: 'Unknown endpoint. Use audio, video or search.' });
+    if (!Object.hasOwn(EP, ep)) return done(404, { error: `Unknown endpoint. Use: ${EP_LIST}.` });
+    const def = EP[ep], P = readParams(def, req.query); q = P.q;
     const s = await getSet();
     if (s.maintenance || s.off.includes(ep)) return done(503, { error: 'Endpoint temporarily disabled.' });
     if (!k) return done(401, { error: 'API key missing. Pass ?key=YOUR_KEY or x-api-key header.' });
@@ -78,19 +93,19 @@ app.get('/api/:ep', async (req, res) => {
     if (s.freeOff && isUserFree(kd)) return done(403, { status: 'API_DISABLED', error: FREE_OFF() });
     if (!kd.active) return done(403, { error: `API key disabled. Contact @${DEV}.` });
     if (kd.expiresAt && new Date(kd.expiresAt) < new Date()) return done(403, { error: `API key expired. Contact @${DEV} for renewal.` });
-    if (!q) return done(400, { error: 'Missing q parameter.' });
+    if (def.need && !P.o[def.need]) return done(400, { error: `Missing ${def.need} parameter.` });
     const LIMIT = `Our API request limit has been reached. To get access to the paid API, please contact @${DEV}`;
-    const range = req.get('range'), pk = k + '|' + ep + '|' + q, free = !!range && (paid.get(pk) || 0) > Date.now(); // seek on an already-counted song/video
+    const range = req.get('range'), pk = k + '|' + ep + '|' + P.qs, free = !!range && (paid.get(pk) || 0) > Date.now(); // seek on an already-counted song/video
     if (!free) {
       const rpm = kd.rpm || s.defaultRpm, c = (hits.get(k) || 0) + 1; hits.set(k, c);
       if (c > rpm) return done(429, { error: `Rate limit reached (${rpm} requests/minute). Please wait a minute and try again. For a higher limit contact @${DEV}` }, { 'Retry-After': '60' });
     }
-    const base = s.useBackup && s.upstream2 ? s.upstream2 : s.upstream, ck = base + '|' + ep + '|' + q;
+    const base = s.useBackup && s.upstream2 ? s.upstream2 : s.upstream, ck = base + '|' + ep + '|' + P.qs;
     if (free) { const c = cached(ck); if (c) { const st = slice(c, range, res); log({ key: k.slice(0, 12), email: kd.email, ep, q, status: st, ms: Date.now() - t0, ip }); return; } }
-    const f = 'used.' + ep, refund = () => { paid.delete(pk); if (!free) Key.updateOne({ _id: kd._id }, { $inc: { [f]: -1 } }).catch(() => {}); };
+    const B = def.bucket, f = 'used.' + B, refund = () => { paid.delete(pk); if (!free) Key.updateOne({ _id: kd._id }, { $inc: { [f]: -1 } }).catch(() => {}); };
     // upstream call and quota check start together (fast); if quota is over we answer at once and cancel the upstream call
-    const ac = new AbortController(), up = open(base, ep, q, range, ac).catch(() => null);
-    const ok = free ? true : await Key.findOneAndUpdate({ _id: kd._id, $expr: { $or: [{ $lte: [{ $ifNull: ['$limits.' + ep, 0] }, 0] }, { $lt: [{ $ifNull: ['$' + f, 0] }, '$limits.' + ep] }] } }, { $inc: { [f]: 1 } }, { projection: { _id: 1 } }); // atomic quota
+    const ac = new AbortController(), up = open(base, ep, P.qs, range, ac).catch(() => null);
+    const ok = free ? true : await Key.findOneAndUpdate({ _id: kd._id, $expr: { $or: [{ $lte: [{ $ifNull: ['$limits.' + B, 0] }, 0] }, { $lt: [{ $ifNull: ['$' + f, 0] }, '$limits.' + B] }] } }, { $inc: { [f]: 1 } }, { projection: { _id: 1 } }); // atomic quota
     if (!ok) { ac.abort(); up.then(cancel); return done(429, { error: LIMIT }); }
     if (!free) paid.set(pk, Date.now() + 30 * 60000);
     const r = await up;
@@ -153,7 +168,7 @@ const ADMIN_PANEL = () => page('Admin · Nazriya API', `<div class="wrap admin">
 <div class="glass card sc"><h3>Recent requests</h3><table><tbody id="recent"></tbody></table></div></div></section>
 
 <section class="tab" id="t-keys" hidden>
-<div class="glass card"><div class="row wrapr"><div class="grow"><h3>API management</h3><p class="mu">Free keys use the free-plan limits from Settings. Admin keys get your own limits and can use a custom key string.</p></div>
+<div class="glass card"><div class="row wrapr"><div class="grow"><h3>API management</h3><p class="mu">Free keys use the free-plan limits from Settings. Admin keys get your own limits and can use a custom key string. FLAC uses the Audio limit; suggest, artist and trending use the Search limit.</p></div>
 <button class="btn ok" data-new="free">+ Free key</button><button class="btn v" data-new="admin">+ Admin key</button></div>
 <div id="nk-box" hidden><div class="row nk-top"><span class="pill" id="nk-mode"></span><span class="mu small">Limit 0 = unlimited · Days empty = never expires</span></div>
 <div class="fgrid">${inp('nk-name', 'Key name', 'text')}${inp('nk-email', 'User email (optional)', 'email', 'user@mail.com')}
@@ -170,7 +185,7 @@ ${inp('nk-a', 'Audio limit')}${inp('nk-v', 'Video limit')}${inp('nk-s', 'Search 
 <div id="dbl"></div><div class="glass card"><h3>Add document</h3><textarea id="dbnew" spellcheck="false">{}</textarea><button class="btn s" id="dbadd">Insert</button></div></section>
 
 <section class="tab" id="t-settings" hidden><div class="glass card"><h3>Global settings</h3><div class="fgrid">${inp('st-upstream', 'Primary upstream URL', 'url')}${inp('st-upstream2', 'Backup upstream URL', 'url')}${inp('st-defaultRpm', 'Default requests / min per key')}${inp('st-freeDays', 'Free key valid days')}${inp('st-freeAudio', 'Free audio limit')}${inp('st-freeVideo', 'Free video limit')}${inp('st-freeSearch', 'Free search limit')}</div>
-<div class="row wrapr tgs">${tog('st-on-audio', 'Audio on')}${tog('st-on-video', 'Video on')}${tog('st-on-search', 'Search on')}${tog('st-maintenance', 'Maintenance mode (blocks all)')}</div>
+<div class="row wrapr tgs">${tog('st-on-audio', 'Audio on')}${tog('st-on-video', 'Video on')}${tog('st-on-search', 'Search on')}${tog('st-on-flac', 'FLAC on')}${tog('st-on-suggest', 'Suggest on')}${tog('st-on-artist', 'Artist on')}${tog('st-on-trending', 'Trending on')}${tog('st-maintenance', 'Maintenance mode (blocks all)')}</div>
 <div class="row"><button class="btn" id="sv">Save settings</button></div>
 <h3 class="danger">Danger zone</h3><div class="row wrapr"><button class="btn g s" id="ra">Reset all usage</button><button class="btn r s" id="cl">Clear all logs</button></div></div></section></div>`,
   { nav: false, attr: ` data-admin="${esc(AP)}"`, src: ['https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js', `/admin.js?v=${V}`] });
@@ -265,7 +280,7 @@ A.delete('/db/:c/:id', wrap(async (req, res) => { const M = COLS[req.params.c]; 
 A.get('/settings', wrap(async (req, res) => res.json(await getSet())));
 A.post('/settings', wrap(async (req, res) => {
   const b = req.body, n = (v, d) => num(v) > 0 ? num(v) : d;
-  await Setting.findByIdAndUpdate('main', { upstream: String(b.upstream || DEFAULTS.upstream).trim().replace(/\/+$/, ''), upstream2: String(b.upstream2 || '').trim().replace(/\/+$/, ''), defaultRpm: n(b.defaultRpm, DEFAULTS.defaultRpm), freeDays: n(b.freeDays, DEFAULTS.freeDays), freeAudio: num(b.freeAudio), freeVideo: num(b.freeVideo), freeSearch: num(b.freeSearch), maintenance: !!b.maintenance, off: Array.isArray(b.off) ? b.off.filter(x => EP[x]) : [] }, { upsert: true });
+  await Setting.findByIdAndUpdate('main', { upstream: String(b.upstream || DEFAULTS.upstream).trim().replace(/\/+$/, ''), upstream2: String(b.upstream2 || '').trim().replace(/\/+$/, ''), defaultRpm: n(b.defaultRpm, DEFAULTS.defaultRpm), freeDays: n(b.freeDays, DEFAULTS.freeDays), freeAudio: num(b.freeAudio), freeVideo: num(b.freeVideo), freeSearch: num(b.freeSearch), maintenance: !!b.maintenance, off: Array.isArray(b.off) ? b.off.filter(x => Object.hasOwn(EP, x)) : [] }, { upsert: true });
   cache = null; res.json({ ok: true, settings: await getSet() });
 }));
 
@@ -317,12 +332,12 @@ app.get('/dashboard', wrap(async (req, res) => {
 <div class="row tags"><span class="pill ${k.plan === 'free' ? 'ok' : 'v'}">${esc(k.plan)}</span><span class="pill ${k.active && !exp ? 'ok' : 'er'}">${!k.active ? 'disabled' : exp ? 'expired' : 'active'}</span></div>
 <div class="keybox"><code data-full="${esc(k.key)}" data-mask="${esc(mask(k.key))}">${esc(mask(k.key))}</code><button class="btn g s" data-reveal aria-label="Show key">Show</button></div><button class="btn w" data-copy="${esc(k.key)}">Copy API key</button>
 <p class="mu small">${left == null ? 'Never expires' : exp ? 'Expired ' + k.expiresAt.toISOString().slice(0, 10) : `${left} day${left === 1 ? '' : 's'} left (${k.expiresAt.toISOString().slice(0, 10)})`} · ${k.rpm || 30} requests/min</p>
-${bar('Audio', k.used?.audio, k.limits?.audio)}${bar('Video', k.used?.video, k.limits?.video)}${bar('Search', k.used?.search, k.limits?.search)}</div>`; }).join('');
+${bar('Audio + FLAC', k.used?.audio, k.limits?.audio)}${bar('Video', k.used?.video, k.limits?.video)}${bar('Search + suggest, artist, trending', k.used?.search, k.limits?.search)}</div>`; }).join('');
   const s = await getSet();
   const notice = s.freeOff ? `<div class="glass card notice"><h3>Free API is turned off</h3><p class="mu">${esc(FREE_OFF())}</p></div>` : '';
   const tk = keys.find(k => k.active && !(k.expiresAt && k.expiresAt < now) && !(s.freeOff && isUserFree(k)));
   const tester = tk ? `<div class="glass card" id="tester" data-key="${esc(tk.key)}"><h3>Try it</h3><p class="mu">Runs a real request with <b>${esc(tk.name)}</b>. It counts toward your quota.</p>
-<div class="row wrapr"><select aria-label="Endpoint"><option value="search">search</option><option value="audio">audio</option><option value="video">video</option></select><input class="grow" placeholder="Song name, e.g. aarzu" aria-label="Song name"><button class="btn">Run</button></div><div class="out"></div><pre hidden></pre>
+<div class="row wrapr"><select aria-label="Endpoint"><option value="search">search</option><option value="audio">audio</option><option value="video">video</option><option value="flac">flac</option><option value="suggest">suggest</option><option value="artist">artist</option><option value="trending">trending</option></select><input class="grow" placeholder="Song name, e.g. aarzu" aria-label="Song name"><button class="btn">Run</button></div><div class="out"></div><pre hidden></pre>
 <h3 class="mt">Your request</h3><pre class="cp">curl "${esc(B)}/api/search?q=aarzu" -H "x-api-key: ${esc(tk.key)}"</pre></div>` : '';
   res.send(page('Dashboard · Nazriya API', `<div class="wrap dash"><div class="hi"><h2>Hi, ${esc(u.name)}</h2><p class="mu">${esc(u.email)}</p></div>
 ${notice}<div class="dgrid"><div class="stack">${cards || '<div class="glass card"><h3>Create your API key</h3><p class="mu">Free plan, ready instantly.</p><label for="kn">Key name (optional)</label><input id="kn" maxlength="40" placeholder="e.g. My Music Bot"><button class="btn w" id="mk">Create free key</button><div class="msg" id="msg" role="alert"></div></div>'}</div>${tester}</div><div class="glass card"><h3>Need more requests?</h3><p class="mu">Paid API ke liye contact karo <a href="https://t.me/${esc(DEV)}">@${esc(DEV)}</a>. <a href="/docs">Read the docs</a> to see every endpoint.</p></div></div>`, { user: u }));
@@ -336,7 +351,7 @@ app.get('/docs', wrap(async (req, res) => {
 <h4>Request</h4>${code(example)}<h4>Response <span class="pill ok">200</span></h4>${code(resp)}<p class="mu small">${NOTE}</p>
 <h4>Code</h4>${code(`<b>JavaScript</b>\nconst r = await fetch("${B}/api/${id}?q=aarzu", { headers: { "x-api-key": "YOUR_KEY" } });\nconst data = await r.json();\n\n<b>Python</b>\nimport requests\ndata = requests.get("${B}/api/${id}", params={"q": "aarzu", "key": "YOUR_KEY"}).json()`)}</div>`;
   res.send(page('Docs · Nazriya API', `<div class="wrap docs"><h1>API docs</h1><p class="l">Three endpoints, one key. Base URL: <code>${esc(B)}</code></p>
-<div class="glass card toc"><a href="#auth">Authentication</a><a href="#search">Search</a><a href="#audio">Audio</a><a href="#video">Video</a><a href="#limits">Limits</a><a href="#errors">Errors</a></div>
+<div class="glass card toc"><a href="#auth">Authentication</a><a href="#search">Search</a><a href="#audio">Audio</a><a href="#video">Video</a><a href="#limits">Limits</a><a href="#errors">Errors</a><a href="/redocs">All endpoints (new) →</a></div>
 <div class="glass card" id="auth"><h3>Authentication</h3><p>Create a free key in your <a href="/dashboard">dashboard</a>. Send it with every request, in one of two ways:</p>
 <div class="sc"><table><tr><th>Method</th><th>Example</th></tr><tr><td>Query parameter</td><td><code>?key=YOUR_KEY</code></td></tr><tr><td>Header</td><td><code>x-api-key: YOUR_KEY</code></td></tr></table></div><p class="mu small">Browser apps can call the API directly; CORS is enabled.</p></div>
 ${sec('search', 'Finds songs by name and returns the matching results. Use it to show a list to your users.', `GET ${B}/api/search?q=aarzu&amp;key=YOUR_KEY`, `{\n  "success": true,\n  "results": [\n    {\n      "title": "Aarzu",\n      "id": "VIDEO_ID",\n      "duration": "3:45",\n      "thumbnail": "https://...",\n      "url": "https://..."\n    }\n  ]\n}`)}
@@ -345,6 +360,62 @@ ${sec('video', 'Returns the playable video for a song. Use it for video players 
 <div class="glass card" id="limits"><h3>Free plan limits</h3><div class="sc"><table><tr><th>Audio</th><th>Video</th><th>Search</th><th>Valid for</th><th>Rate</th></tr><tr><td>${s.freeAudio}</td><td>${s.freeVideo}</td><td>${s.freeSearch}</td><td>${s.freeDays} days</td><td>${s.defaultRpm}/min</td></tr></table></div><p class="mu small">Failed requests are not counted against your quota. Seeking inside a song you already played is free. Need more? Contact <a href="https://t.me/${esc(DEV)}">@${esc(DEV)}</a> for the paid plan.</p></div>
 <div class="glass card" id="errors"><h3>Errors</h3><div class="sc"><table><tr><th>Code</th><th>Meaning</th></tr><tr><td>400</td><td>Missing <code>q</code></td></tr><tr><td>401</td><td>Missing or invalid key</td></tr><tr><td>403</td><td>Key expired or disabled</td></tr><tr><td>429</td><td>Quota finished or rate limit hit</td></tr><tr><td>502 / 503</td><td>Source error or endpoint disabled</td></tr></table></div>${code('{ "success": false, "error": "Invalid API key." }')}</div></div>`, { user: u }));
 }));
+
+/* ── /redocs: full API reference (ReDoc) for ALL endpoints, old + new. Spec lives at /openapi.json ── */
+const openapi = (B, s) => {
+  const P = {
+    q: (d, ex) => ({ name: 'q', in: 'query', required: true, description: d, schema: { type: 'string', maxLength: 200 }, example: ex }),
+    hl: { name: 'hl', in: 'query', required: false, description: 'Language code for suggestions, e.g. `en`, `hi`.', schema: { type: 'string', default: 'en' }, example: 'en' },
+    name: { name: 'name', in: 'query', required: true, description: 'Artist name.', schema: { type: 'string', maxLength: 200 }, example: 'arijit singh' },
+    n: { name: 'n', in: 'query', required: false, description: 'How many songs to return (1–100).', schema: { type: 'integer', minimum: 1, maximum: 100 }, example: 20 }
+  };
+  const err = d => ({ description: d, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } });
+  const ERR = { 400: err('Missing required parameter'), 401: err('Missing or invalid API key'), 403: err('Key expired or disabled'), 429: err('Quota finished or rate limit hit'), 502: err('Upstream source error'), 503: err('Endpoint disabled or maintenance') };
+  const json = (ex) => ({ 'application/json': { schema: { type: 'object', additionalProperties: true }, example: ex } });
+  const media = (type, ex) => ({ ...json(ex), [type]: { schema: { type: 'string', format: 'binary' } } });
+  const op = (tag, summary, desc, bucket, params, content, extra = '') => ({ get: {
+    tags: [tag], summary, operationId: summary.toLowerCase().replace(/\W+/g, '_'),
+    description: `${desc}\n\n**Quota:** counts against your **${bucket}** limit.${extra}\n\n_Response is passed through exactly as the source returns it, so field names may differ slightly from the example._`,
+    parameters: params, responses: { 200: { description: 'OK', content }, ...ERR } } });
+  const rangeNote = '\n\n**Seeking:** HTTP `Range` requests are supported. Seeking inside a track you already played (within 30 min) is free.';
+  return {
+    openapi: '3.0.3',
+    info: { title: 'Nazriya Music API', version: '2.1.0', description: `One key, seven endpoints. Get a free key on the [dashboard](${B}/dashboard).\n\n## Authentication\nSend your key as \`?key=YOUR_KEY\` or as the \`x-api-key\` header. CORS is enabled, so browser apps can call the API directly.\n\n## Quota buckets\n| Bucket | Endpoints | Free plan |\n|---|---|---|\n| Audio | \`/api/audio\`, \`/api/flac\` | ${s.freeAudio} |\n| Video | \`/api/video\` | ${s.freeVideo} |\n| Search | \`/api/search\`, \`/api/suggest\`, \`/api/artist\`, \`/api/trending\` | ${s.freeSearch} |\n\nFree keys are valid ${s.freeDays} days. Rate limit: ${s.defaultRpm} requests/min per key. Failed requests are not counted. Need more? Contact [@${DEV}](https://t.me/${DEV}).\n\n## Errors\nEvery error looks like \`{ "success": false, "error": "..." }\`.`, contact: { name: '@' + DEV, url: 'https://t.me/' + DEV } },
+    servers: [{ url: B }],
+    security: [{ ApiKeyHeader: [] }, { ApiKeyQuery: [] }],
+    tags: [{ name: 'Core', description: 'Original endpoints (same as /docs).' }, { name: 'New', description: 'New endpoints: FLAC, suggestions, artist and trending.' }],
+    paths: {
+      '/api/search': op('Core', 'Search', 'Finds songs by name and returns the matching results. Use it to show a list to your users.', 'Search', [P.q('Search text, e.g. song or artist name.', 'aarzu')],
+        json({ success: true, results: [{ title: 'Aarzu', id: 'VIDEO_ID', duration: '3:45', thumbnail: 'https://...', url: 'https://...' }] })),
+      '/api/audio': op('Core', 'Audio', 'Returns the playable audio for a song. Use it for audio players and music bots.', 'Audio', [P.q('Song name (or artist + song name).', 'aarzu')],
+        media('audio/*', { success: true, title: 'Aarzu', duration: '3:45', audio: 'https://.../audio-link' }), rangeNote),
+      '/api/video': op('Core', 'Video', 'Returns the playable video for a song. Use it for video players and video chat bots.', 'Video', [P.q('Song name (or artist + song name).', 'aarzu')],
+        media('video/*', { success: true, title: 'Aarzu', duration: '3:45', video: 'https://.../video-link' }), rangeNote),
+      '/api/flac': op('New', 'FLAC', 'Returns the song in lossless FLAC quality. Same usage as `/api/audio`, bigger file, better sound.', 'Audio', [P.q('Song name (or artist + song name).', 'Ishq')],
+        media('audio/flac', { success: true, title: 'Ishq', flac: 'https://.../flac-link' }), rangeNote),
+      '/api/suggest': op('New', 'Suggest', 'Autocomplete suggestions while the user is typing. Use it for a search box dropdown.', 'Search', [P.q('Partial text the user typed.', 'arijit'), P.hl],
+        json({ success: true, suggestions: ['arijit singh', 'arijit singh songs', '...'] })),
+      '/api/artist': op('New', 'Artist', 'Artist details and their songs.', 'Search', [P.name],
+        json({ success: true, artist: { name: 'Arijit Singh', thumbnail: 'https://...' }, songs: [{ title: '...', id: 'VIDEO_ID' }] })),
+      '/api/trending': op('New', 'Trending', 'Currently trending songs.', 'Search', [P.n],
+        json({ success: true, results: [{ title: '...', id: 'VIDEO_ID', duration: '3:45', thumbnail: 'https://...' }] }))
+    },
+    components: {
+      securitySchemes: { ApiKeyHeader: { type: 'apiKey', in: 'header', name: 'x-api-key' }, ApiKeyQuery: { type: 'apiKey', in: 'query', name: 'key' } },
+      schemas: { Error: { type: 'object', properties: { success: { type: 'boolean', example: false }, error: { type: 'string', example: 'Invalid API key.' } } } }
+    }
+  };
+};
+app.get('/openapi.json', wrap(async (req, res) => { res.set('Access-Control-Allow-Origin', '*').json(openapi(`${req.protocol}://${req.get('host')}`, await getSet())); }));
+const REDOC_OPTS = { hideDownloadButton: false, expandResponses: '200', requiredPropsFirst: true, sortPropsAlphabetically: false, pathInMiddlePanel: true,
+  theme: { colors: { primary: { main: '#ff5e8a' } }, typography: { fontFamily: 'Manrope, system-ui, sans-serif', headings: { fontFamily: '"Bricolage Grotesque", Manrope, sans-serif' }, code: { fontFamily: '"JetBrains Mono", ui-monospace, monospace' } },
+    sidebar: { backgroundColor: '#120d1a', textColor: '#f3eef8', activeTextColor: '#ff5e8a' }, rightPanel: { backgroundColor: '#1c1426' } } };
+app.get('/redocs', (req, res) => res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#120d1a"><title>Redocs · Nazriya API</title><link rel="icon" href="${FAV}">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0}.top{display:flex;gap:16px;align-items:center;padding:10px 18px;background:#120d1a;font:600 14px Manrope,system-ui,sans-serif}.top a{color:#f3eef8;text-decoration:none}.top a:first-child{color:#ff5e8a;font-weight:800;margin-right:auto}</style></head>
+<body><div class="top"><a href="/">Nazriya API</a><a href="/docs">Docs</a><a href="/dashboard">Dashboard</a><a href="/openapi.json">openapi.json</a></div><div id="redoc"></div>
+<script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"></script>
+<script>Redoc.init('/openapi.json', ${JSON.stringify(REDOC_OPTS)}, document.getElementById('redoc'))</script></body></html>`));
 
 app.use((req, res) => req.accepts('html') ? res.status(404).send(page('Not found · Nazriya API', '<div class="lock"><div class="glass card"><h2>Page not found</h2><p class="mu">This link is wrong or the page moved.</p><a class="btn w" href="/">Go home</a></div></div>')) : res.status(404).json({ error: 'Not found' }));
 app.use((err, req, res, next) => { console.error(err); if (res.headersSent) return res.destroy(); res.status(500).json({ error: 'Server error' }); });
