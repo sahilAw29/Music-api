@@ -4,7 +4,17 @@
 // - upstream ignores Range -> we buffer once (cached) and serve the slices ourselves
 const { Readable } = require('stream');
 
-const EP = { audio: '/song/audio', video: '/song/video', search: '/search' };
+// Every public endpoint: upstream path, which quota bucket it uses, which query params pass through, which one is required.
+// Quota buckets stay audio / video / search, so old keys, limits and the admin panel keep working as before.
+const EP = {
+  audio:    { path: '/song/audio', bucket: 'audio',  params: ['q'],       need: 'q' },
+  video:    { path: '/song/video', bucket: 'video',  params: ['q'],       need: 'q' },
+  search:   { path: '/search',     bucket: 'search', params: ['q'],       need: 'q' },
+  flac:     { path: '/song/flac',  bucket: 'audio',  params: ['q'],       need: 'q' },    // lossless audio, counts as audio
+  suggest:  { path: '/suggest',    bucket: 'search', params: ['q', 'hl'], need: 'q' },    // search suggestions
+  artist:   { path: '/artist',     bucket: 'search', params: ['name'],    need: 'name' }, // artist info + songs
+  trending: { path: '/trending',   bucket: 'search', params: ['n'],       need: null }    // trending songs, n optional
+};
 const CACHE_TTL = 10 * 60 * 1000, CACHE_MAX = 200 * 1024 * 1024;
 const cache = new Map(); let cacheBytes = 0; // fallback buffers for upstreams without Range support
 setInterval(() => { const n = Date.now(); for (const [k, v] of cache) if (v.exp < n) drop(k); }, 60000).unref();
@@ -27,10 +37,11 @@ function parseRange(h, size) {
 
 // Start the upstream request. Resolves when HEADERS arrive (body is not read yet).
 // Timeout only covers the wait for headers, so long videos are not cut after 30s.
-function open(base, ep, q, range, ac) {
+// qs = already-encoded query string, e.g. "q=ishq" or "name=arijit+singh"
+function open(base, ep, qs, range, ac) {
   const t = setTimeout(() => ac.abort(), 30000);
   const headers = {}; if (range) headers.range = range;
-  return fetch(base + EP[ep] + '?q=' + encodeURIComponent(q), { headers, signal: ac.signal }).finally(() => clearTimeout(t));
+  return fetch(base + EP[ep].path + (qs ? '?' + qs : ''), { headers, signal: ac.signal }).finally(() => clearTimeout(t));
 }
 
 const isText = t => /json|text|xml|javascript/i.test(t);
